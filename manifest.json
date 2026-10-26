@@ -1,0 +1,9 @@
+{
+  "name": "Codex — Oficina Literária Pessoal",
+  "short_name": "Codex",
+  "description": "Organização de leituras (Kindle & Físico) e oficina de resenhas críticas em 3 atos.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FBF8F3",
+  "theme_color": "#7C2D12"
+}

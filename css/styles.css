@@ -1,0 +1,44 @@
+:root {
+      --bg-primary: #FBF8F3;
+      --bg-card: #F4EFE6;
+      --border-color: #E8DFD1;
+      --text-primary: #2C2623;
+      --text-muted: #786956;
+    }
+    html.dark {
+      --bg-primary: #181512;
+      --bg-card: #24201C;
+      --border-color: #36302A;
+      --text-primary: #E6DFD5;
+      --text-muted: #A3927B;
+    }
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, sans-serif;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+    .font-editorial {
+      font-family: 'Lora', Georgia, serif;
+    }
+    .literary-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .literary-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .literary-scroll::-webkit-scrollbar-thumb {
+      background: rgba(163, 146, 123, 0.35);
+      border-radius: 9999px;
+    }
+    .literary-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(163, 146, 123, 0.6);
+    }
+    .book-spine-shadow {
+      box-shadow: -3px 0 6px rgba(0,0,0,0.12), 4px 6px 14px rgba(44, 38, 35, 0.14);
+    }
+    textarea.editorial-editor {
+      line-height: 1.8;
+      font-family: 'Lora', Georgia, serif;
+    }
