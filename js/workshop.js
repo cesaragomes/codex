@@ -28,7 +28,6 @@
       const book = state.books.find(b => b.id === state.selectedBookId) || state.books[0];
       state.selectedBookId = book.id;
 
-      // Render Book Header inside Workshop
       const headerEl = document.getElementById('workshop-book-header');
       const velText = book.daysTaken && book.pagesPerDay
         ? `${book.pageCount} páginas lidas em <strong>${book.daysTaken} dias</strong> (<strong class="text-burgundy-600 dark:text-amber-400">${book.pagesPerDay} págs/dia</strong>)`
@@ -68,7 +67,6 @@
         </div>
       `;
 
-      // Populate the 3 Separated Editors
       const review = state.reviews.find(r => r.bookId === book.id);
       document.getElementById('editor-act1').value = review?.act1Premise || '';
       document.getElementById('editor-act2').value = review?.act2Analysis || '';
@@ -88,6 +86,7 @@
         await db.books.put(book);
       }
       renderShelf();
+      await pushAllToFirestore(true);
       showToast(`Avaliação atualizada para ${newRating > 0 ? newRating.toFixed(1) + ' ★' : 'Sem nota'}`);
     }
 
@@ -102,7 +101,7 @@
       } else {
         state.autosaveTimer = setTimeout(() => {
           saveCurrentReviewNow(true);
-        }, 450);
+        }, 550);
       }
     }
 
@@ -187,8 +186,9 @@
         indicator.textContent = `✓ Salvo às ${timeStr}`;
       }
       renderShelf();
+      await pushAllToFirestore(true);
       if (!silent) {
-        showToast('Resenha salva no banco local (IndexedDB)!');
+        showToast('Resenha salva localmente e sincronizada na nuvem!');
       }
     }
 
@@ -279,7 +279,8 @@
       document.getElementById('workshop-note-ref').value = '';
       document.getElementById('workshop-note-content').value = '';
       await refreshStateFromDB();
-      showToast('Nota adicionada ao caderno da obra!');
+      await pushAllToFirestore(true);
+      showToast('Nota adicionada e sincronizada!');
     }
 
     function insertNoteIntoEditor(noteId) {
@@ -301,5 +302,6 @@
         memoryStore.notes = memoryStore.notes.filter(n => n.id !== noteId);
       }
       await refreshStateFromDB();
+      await pushAllToFirestore(true);
       showToast('Nota removida.');
     }

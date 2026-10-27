@@ -34,7 +34,6 @@
       document.getElementById('stat-total-words').textContent = `${totalWords.toLocaleString('pt-BR')} pal.`;
       document.getElementById('stat-avg-richness').textContent = `${avgRichness}% riqueza`;
 
-      // Populate Comparative Table
       const tbody = document.getElementById('analytics-table-body');
       if (completedBooks.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-paper-500">Nenhum livro concluído no período selecionado.</td></tr>`;
@@ -65,7 +64,6 @@
         }).join('');
       }
 
-      // Render Charts with Chart.js
       if (typeof Chart === 'undefined') return;
       const isDark = document.documentElement.classList.contains('dark');
       const textColor = isDark ? '#E6DFD5' : '#2C2623';

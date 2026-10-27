@@ -1,6 +1,24 @@
 // =========================================================================
-    // 1. DATABASE INITIALIZATION (DEXIE.JS / INDEXEDDB + FALLBACK IN-MEMORY)
+    // 1. FIREBASE, CLOUD FIRESTORE, GOOGLE DRIVE & DEXIE INITIALIZATION
     // =========================================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDgqqUTHcKXQCiEDd5ApjE3TQY4px8DuZY",
+      authDomain: "codex-literario.firebaseapp.com",
+      projectId: "codex-literario",
+      storageBucket: "codex-literario.firebasestorage.app",
+      messagingSenderId: "986298989133",
+      appId: "1:986298989133:web:eb2a5ed9beb7294f5dba04",
+      measurementId: "G-YL2CRS36SZ"
+    };
+
+    const ALLOWED_OWNER_EMAIL = "cesaraugusto.pintogomes@gmail.com";
+
+    let firebaseApp = null;
+    let firebaseAuth = null;
+    let firestoreDB = null;
+    let currentUser = null;
+    let googleDriveAccessToken = null;
+
     let db = null;
     let useMemoryFallback = false;
     const memoryStore = {
@@ -34,6 +52,350 @@
       evolutionChart: null,
       autosaveTimer: null
     };
+
+    function initFirebaseServices() {
+      try {
+        if (typeof firebase !== 'undefined') {
+          if (!firebase.apps.length) {
+            firebaseApp = firebase.initializeApp(firebaseConfig);
+          } else {
+            firebaseApp = firebase.app();
+          }
+          firebaseAuth = firebase.auth();
+          firestoreDB = firebase.firestore();
+
+          try {
+            googleDriveAccessToken = sessionStorage.getItem('codex_gdrive_token') || null;
+          } catch (e) {}
+
+          firebaseAuth.onAuthStateChanged(async (user) => {
+            if (user) {
+              if (user.email && user.email.toLowerCase() !== ALLOWED_OWNER_EMAIL.toLowerCase()) {
+                await firebaseAuth.signOut();
+                showAuthError(`Acesso negado para ${user.email}. Este Codex pertence exclusivamente a ${ALLOWED_OWNER_EMAIL}.`);
+                return;
+              }
+              currentUser = user;
+              hideAuthGate();
+              updateUserAuthUI();
+              await pullAllFromFirestore(true);
+            } else {
+              currentUser = null;
+              updateUserAuthUI();
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Firebase init fallback:', err);
+      }
+    }
+
+    function showAuthError(msg) {
+      const box = document.getElementById('auth-error-box');
+      if (!box) return;
+      box.textContent = msg;
+      box.classList.remove('hidden');
+    }
+
+    function hideAuthGate() {
+      const gate = document.getElementById('auth-gate-overlay');
+      if (gate) gate.classList.add('hidden');
+    }
+
+    function unlockPreviewMode() {
+      hideAuthGate();
+      const pill = document.getElementById('cloud-status-pill');
+      if (pill) pill.textContent = '💾 Modo Local';
+      showToast('Modo Local liberado! No GitHub Pages você pode entrar com sua conta Google.');
+    }
+
+    async function signInWithGoogle() {
+      if (!firebaseAuth) {
+        unlockPreviewMode();
+        return;
+      }
+      const btn = document.getElementById('btn-google-login');
+      const errBox = document.getElementById('auth-error-box');
+      if (errBox) errBox.classList.add('hidden');
+      if (btn) btn.textContent = 'Autenticando com Google...';
+
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        // Solicita escopo para criar/atualizar arquivo de backup no Google Drive do usuário
+        provider.addScope('https://www.googleapis.com/auth/drive.file');
+        provider.setCustomParameters({
+          login_hint: ALLOWED_OWNER_EMAIL,
+          prompt: 'select_account'
+        });
+
+        const result = await firebaseAuth.signInWithPopup(provider);
+        const user = result.user;
+
+        if (user.email && user.email.toLowerCase() !== ALLOWED_OWNER_EMAIL.toLowerCase()) {
+          await firebaseAuth.signOut();
+          showAuthError(`Conta não autorizada (${user.email}). Faça login com ${ALLOWED_OWNER_EMAIL}.`);
+          if (btn) btn.textContent = 'Entrar com Conta Google';
+          return;
+        }
+
+        if (result.credential && result.credential.accessToken) {
+          googleDriveAccessToken = result.credential.accessToken;
+          try {
+            sessionStorage.setItem('codex_gdrive_token', googleDriveAccessToken);
+          } catch (e) {}
+        }
+
+        currentUser = user;
+        hideAuthGate();
+        updateUserAuthUI();
+        showToast(`Bem-vindo ao Codex, César! Sincronizando acervo...`);
+        await pullAllFromFirestore(true);
+      } catch (err) {
+        const code = err?.code || '';
+        if (code === 'auth/unauthorized-domain' || code === 'auth/operation-not-supported-in-this-environment') {
+          showAuthError('Este ambiente de pré-visualização bloqueia popups OAuth. Ao publicar no seu GitHub Pages (domínio autorizado no Firebase), o login Google funcionará normalmente. Clique em "Testar no Modo Local" abaixo para usar agora.');
+        } else {
+          showAuthError(`Não foi possível concluir o login Google (${err.message || code}).`);
+        }
+      } finally {
+        if (btn) {
+          btn.innerHTML = `<span>Entrar com Conta Google</span>`;
+        }
+      }
+    }
+
+    async function handleUserBadgeClick() {
+      if (currentUser && firebaseAuth) {
+        await firebaseAuth.signOut();
+        currentUser = null;
+        googleDriveAccessToken = null;
+        try { sessionStorage.removeItem('codex_gdrive_token'); } catch (e) {}
+        updateUserAuthUI();
+        document.getElementById('auth-gate-overlay').classList.remove('hidden');
+        showToast('Sessão encerrada com segurança.');
+      } else {
+        document.getElementById('auth-gate-overlay').classList.remove('hidden');
+      }
+    }
+
+    function updateUserAuthUI() {
+      const label = document.getElementById('user-auth-label');
+      const pill = document.getElementById('cloud-status-pill');
+      const modalBadge = document.getElementById('modal-firestore-badge');
+
+      if (currentUser) {
+        if (label) label.textContent = 'César • Sair';
+        if (pill) pill.textContent = '☁️ Firebase Ativo';
+        if (modalBadge) {
+          modalBadge.textContent = 'Sincronizado (' + currentUser.email + ')';
+          modalBadge.className = 'text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-600/15 text-emerald-700 dark:text-emerald-300';
+        }
+      } else {
+        if (label) label.textContent = 'Login Google';
+        if (pill) pill.textContent = '💾 Cache Local';
+        if (modalBadge) {
+          modalBadge.textContent = 'Aguardando Login';
+          modalBadge.className = 'text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300';
+        }
+      }
+    }
+
+    // Cloud Firestore Sync Helpers
+    async function pushAllToFirestore(silent = true) {
+      if (!firestoreDB || !currentUser) {
+        if (!silent) showToast('Faça login com sua conta Google para sincronizar com o Firebase.');
+        return;
+      }
+      try {
+        const pill = document.getElementById('cloud-status-pill');
+        if (pill) pill.textContent = '⏳ Salvando nuvem...';
+
+        const docRef = firestoreDB.collection('users').doc(currentUser.uid).collection('codex').doc('libraryState');
+        await docRef.set({
+          ownerEmail: currentUser.email,
+          updatedAt: new Date().toISOString(),
+          books: JSON.parse(JSON.stringify(state.books || [])),
+          notes: JSON.parse(JSON.stringify(state.notes || [])),
+          reviews: JSON.parse(JSON.stringify(state.reviews || []))
+        }, { merge: true });
+
+        if (pill) pill.textContent = '☁️ Nuvem em dia';
+        if (!silent) showToast('Todos os dados foram salvos no Firebase Cloud Firestore!');
+      } catch (err) {
+        console.warn('Erro ao sincronizar Firestore:', err);
+        if (!silent) showToast('Erro ao salvar no Firestore. Verifique as Regras (Rules) do projeto.');
+      }
+    }
+
+    async function pullAllFromFirestore(silent = true) {
+      if (!firestoreDB || !currentUser) {
+        if (!silent) showToast('Faça login com sua conta Google primeiro.');
+        return;
+      }
+      try {
+        const pill = document.getElementById('cloud-status-pill');
+        if (pill) pill.textContent = '⏳ Lendo nuvem...';
+
+        const docRef = firestoreDB.collection('users').doc(currentUser.uid).collection('codex').doc('libraryState');
+        const snap = await docRef.get();
+
+        if (snap.exists) {
+          const cloudData = snap.data();
+          if (Array.isArray(cloudData.books) && cloudData.books.length > 0) {
+            if (!useMemoryFallback && db) {
+              await db.books.clear();
+              await db.notes.clear();
+              await db.reviews.clear();
+              await db.books.bulkPut(cloudData.books || []);
+              await db.notes.bulkPut(cloudData.notes || []);
+              await db.reviews.bulkPut(cloudData.reviews || []);
+            } else {
+              memoryStore.books = cloudData.books || [];
+              memoryStore.notes = cloudData.notes || [];
+              memoryStore.reviews = cloudData.reviews || [];
+            }
+            await refreshStateFromDB();
+            if (!silent) showToast(`Sincronizado da nuvem: ${cloudData.books.length} livros carregados!`);
+          } else {
+            await pushAllToFirestore(true);
+          }
+        } else {
+          // Primeiro acesso na nuvem: sobe os dados atuais para inicializar o Firestore
+          await pushAllToFirestore(true);
+        }
+        if (pill) pill.textContent = '☁️ Nuvem em dia';
+      } catch (err) {
+        console.warn('Falha ao buscar do Firestore:', err);
+        if (!silent) showToast('Não foi possível ler do Firestore. Verifique se as Rules foram publicadas.');
+      }
+    }
+
+    // Google Drive API Direct Backup & Restore
+    async function ensureGoogleDriveToken() {
+      if (googleDriveAccessToken) return googleDriveAccessToken;
+      if (!firebaseAuth) return null;
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/drive.file');
+      provider.setCustomParameters({ login_hint: ALLOWED_OWNER_EMAIL });
+      const result = await firebaseAuth.signInWithPopup(provider);
+      googleDriveAccessToken = result?.credential?.accessToken || null;
+      if (googleDriveAccessToken) {
+        try { sessionStorage.setItem('codex_gdrive_token', googleDriveAccessToken); } catch (e) {}
+      }
+      return googleDriveAccessToken;
+    }
+
+    async function backupToGoogleDrive() {
+      const btn = document.getElementById('btn-drive-save');
+      try {
+        if (btn) btn.textContent = 'Enviando ao Drive...';
+        const token = await ensureGoogleDriveToken();
+        if (!token) {
+          showToast('Faça login com o Google para autorizar o envio ao Google Drive.');
+          return;
+        }
+
+        const payload = {
+          app: 'Codex Literary Workshop',
+          owner: ALLOWED_OWNER_EMAIL,
+          version: 2,
+          exportedAt: new Date().toISOString(),
+          books: state.books,
+          notes: state.notes,
+          reviews: state.reviews
+        };
+
+        // Procura se já existe um arquivo codex-cloud-backup.json criado pelo app no Drive
+        const searchRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='codex-cloud-backup.json' and trashed=false")}&fields=files(id,name)`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const searchData = await searchRes.json();
+        const existingFile = searchData.files && searchData.files[0];
+
+        const metadata = {
+          name: 'codex-cloud-backup.json',
+          mimeType: 'application/json'
+        };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+
+        const uploadUrl = existingFile
+          ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
+          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: existingFile ? 'PATCH' : 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form
+        });
+
+        if (!uploadRes.ok) throw new Error('Falha na API do Google Drive');
+        showToast('Backup salvo diretamente no seu Google Drive (codex-cloud-backup.json)!');
+      } catch (err) {
+        showToast('Não foi possível salvar no Drive. Verifique se a Google Drive API está ativa no Google Cloud.');
+      } finally {
+        if (btn) btn.textContent = '📁 Salvar Backup no Google Drive';
+      }
+    }
+
+    async function restoreFromGoogleDrive() {
+      const btn = document.getElementById('btn-drive-restore');
+      try {
+        if (btn) btn.textContent = 'Buscando no Drive...';
+        const token = await ensureGoogleDriveToken();
+        if (!token) {
+          showToast('Faça login com o Google para acessar seu backup no Drive.');
+          return;
+        }
+
+        const searchRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='codex-cloud-backup.json' and trashed=false")}&orderBy=modifiedTime desc&fields=files(id,name,modifiedTime)`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const searchData = await searchRes.json();
+        const file = searchData.files && searchData.files[0];
+
+        if (!file) {
+          showToast('Nenhum arquivo codex-cloud-backup.json encontrado no seu Google Drive.');
+          return;
+        }
+
+        const fileRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await fileRes.json();
+
+        if (!Array.isArray(data.books)) {
+          showToast('Formato de backup inválido no Google Drive.');
+          return;
+        }
+
+        if (!useMemoryFallback && db) {
+          await db.books.clear();
+          await db.notes.clear();
+          await db.reviews.clear();
+          await db.books.bulkPut(data.books || []);
+          await db.notes.bulkPut(data.notes || []);
+          await db.reviews.bulkPut(data.reviews || []);
+        } else {
+          memoryStore.books = data.books || [];
+          memoryStore.notes = data.notes || [];
+          memoryStore.reviews = data.reviews || [];
+        }
+
+        await refreshStateFromDB();
+        await pushAllToFirestore(true);
+        showToast(`Acervo restaurado do Google Drive (${data.books.length} livros)!`);
+      } catch (err) {
+        showToast('Erro ao restaurar do Google Drive.');
+      } finally {
+        if (btn) btn.textContent = '📥 Restaurar do Google Drive';
+      }
+    }
 
     async function initDatabase() {
       try {

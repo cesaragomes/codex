@@ -119,7 +119,8 @@
     function exportFullBackupJSON() {
       const payload = {
         app: 'Codex Literary Workshop',
-        version: 1,
+        owner: ALLOWED_OWNER_EMAIL,
+        version: 2,
         exportedAt: new Date().toISOString(),
         books: state.books,
         notes: state.notes,
@@ -153,8 +154,9 @@
           memoryStore.reviews = data.reviews || [];
         }
         await refreshStateFromDB();
+        await pushAllToFirestore(true);
         closeBackupModal();
-        showToast(`Backup restaurado: ${data.books.length} livros recuperados!`);
+        showToast(`Backup restaurado e sincronizado: ${data.books.length} livros recuperados!`);
       } catch (err) {
         showToast('Erro ao ler o arquivo de backup JSON.');
       }
@@ -211,7 +213,8 @@
       }, 3200);
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       loadSavedTheme();
-      initDatabase();
+      await initDatabase();
+      initFirebaseServices();
     });

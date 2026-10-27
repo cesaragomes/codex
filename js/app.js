@@ -108,7 +108,6 @@
       document.getElementById('count-backlog').textContent = backlogCount;
       document.getElementById('count-completed').textContent = completedCount;
 
-      // Update Top Shelf KPIs
       const totalPagesRead = completedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
       const totalDaysRead = completedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
       const avgSpeed = completedCount > 0 ? (totalPagesRead / Math.max(1, totalDaysRead)).toFixed(1) : '0';
@@ -268,6 +267,7 @@
         await db.books.put(book);
       }
       await refreshStateFromDB();
+      await pushAllToFirestore(true);
 
       if (newStatus === 'completed') {
         showToast(`"${book.title}" concluído! Ritmo: ${book.pagesPerDay} págs/dia em ${book.daysTaken} dias.`);
