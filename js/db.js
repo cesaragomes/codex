@@ -1,8 +1,13 @@
 // =========================================================================
     // 1. FIREBASE, CLOUD FIRESTORE, GOOGLE DRIVE & DEXIE INITIALIZATION
     // =========================================================================
+    // Carrega a chave injetada pelo GitHub Actions Secrets (__CODEX_FIREBASE_API_KEY__)
+    // com fallback em runtime que nao dispara o alerta de Secret Scanning do GitHub no repositorio
+    // A chave real fica salva oculta em Settings -> Secrets -> Actions (FIREBASE_API_KEY) no GitHub
+    // e e injetada automaticamente pelo GitHub Actions no momento do deploy!
+    const _injectedKey = "__CODEX_FIREBASE_API_KEY__";
     const firebaseConfig = {
-      apiKey: "AIzaSyDgqqUTHcKXQCiEDd5ApjE3TQY4px8DuZY",
+      apiKey: !_injectedKey.startsWith("__CODEX_") ? _injectedKey : (localStorage.getItem("codex_firebase_api_key") || ""),
       authDomain: "codex-literario.firebaseapp.com",
       projectId: "codex-literario",
       storageBucket: "codex-literario.firebasestorage.app",
