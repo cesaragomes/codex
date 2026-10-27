@@ -204,14 +204,16 @@
       document.getElementById('count-backlog').textContent = backlogCount;
       document.getElementById('count-completed').textContent = completedCount;
 
-      const totalPagesRead = completedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
-      const timedCompletedBooks = completedBooks.filter(b => !b.excludeFromSpeedCalc && b.daysTaken && Number(b.daysTaken) > 0 && b.pagesPerDay);
+      const countedCompletedBooks = completedBooks.filter(b => !b.excludeFromSpeedCalc);
+      const countedCompletedCount = countedCompletedBooks.length;
+      const totalPagesRead = countedCompletedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
+      const timedCompletedBooks = countedCompletedBooks.filter(b => b.daysTaken && Number(b.daysTaken) > 0 && b.pagesPerDay);
       const timedPagesRead = timedCompletedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
       const totalDaysRead = timedCompletedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
       const avgSpeed = timedCompletedBooks.length > 0 ? (timedPagesRead / Math.max(1, totalDaysRead)).toFixed(1) : '0';
       const completedReviewsCount = state.reviews.filter(r => r.wordCount > 10).length;
 
-      document.getElementById('kpi-shelf-completed').textContent = completedCount;
+      document.getElementById('kpi-shelf-completed').textContent = countedCompletedCount;
       document.getElementById('kpi-shelf-pages').textContent = totalPagesRead.toLocaleString('pt-BR');
       document.getElementById('kpi-shelf-speed').textContent = `${avgSpeed} p/d`;
       document.getElementById('kpi-shelf-reviews').textContent = completedReviewsCount;

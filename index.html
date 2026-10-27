@@ -641,15 +641,23 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="space-y-1">
-            <label for="book-status-input" class="text-xs font-medium text-paper-700 dark:text-paper-300">Lista na Estante</label>
-            <select id="book-status-input" onchange="handleModalStatusChange()" class="w-full px-3 py-2 rounded-lg text-sm bg-paper-50 dark:bg-stone-950 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
-              <option value="backlog">Quero Ler (Backlog)</option>
-              <option value="reading">Lendo Agora</option>
-              <option value="completed">Lido (Concluído)</option>
-            </select>
+        <div class="space-y-1.5">
+          <label class="text-xs font-medium text-paper-700 dark:text-paper-300 block">Lista na Estante</label>
+          <input type="hidden" id="book-status-input" value="reading" />
+          <div class="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-paper-200/90 dark:bg-stone-950 border border-paper-300 dark:border-stone-700">
+            <button type="button" id="status-seg-backlog" onclick="setModalBookStatus('backlog')" class="py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-paper-600 dark:text-paper-400 hover:text-paper-800 dark:hover:text-paper-200">
+              Quero Ler
+            </button>
+            <button type="button" id="status-seg-reading" onclick="setModalBookStatus('reading')" class="py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-burgundy-600 dark:bg-amber-600 text-white shadow-xs">
+              Lendo Agora
+            </button>
+            <button type="button" id="status-seg-completed" onclick="setModalBookStatus('completed')" class="py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-paper-600 dark:text-paper-400 hover:text-paper-800 dark:hover:text-paper-200">
+              Lido
+            </button>
           </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1">
             <label for="book-format-input" class="text-xs font-medium text-paper-700 dark:text-paper-300">Onde você lê?</label>
             <select id="book-format-input" class="w-full px-3 py-2 rounded-lg text-sm bg-paper-50 dark:bg-stone-950 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
@@ -679,7 +687,7 @@
         <div id="book-dates-row" class="space-y-3 bg-paper-200/60 dark:bg-stone-800/50 p-3.5 rounded-xl border border-paper-300/80 dark:border-stone-700">
           <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
             <input type="checkbox" id="book-skip-dates-input" onchange="handleSkipDatesToggle()" class="w-4 h-4 rounded text-burgundy-600 focus:ring-0" />
-            <span class="text-xs font-medium text-paper-800 dark:text-paper-100">Não lembro quando li (não incluir este livro no cálculo de datas e velocidade)</span>
+            <span class="text-xs font-medium text-paper-800 dark:text-paper-100">Não lembro quando li (não incluir em Lidos no Ano, Páginas Lidas e Velocidade)</span>
           </label>
           <div id="book-dates-inputs-wrap" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-paper-300/60 dark:border-stone-700/60 transition-opacity">
             <div class="space-y-1">
@@ -838,12 +846,19 @@
       <!-- Batch Settings Row (Apenas Status e Formato Padrão) -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-paper-200/70 dark:bg-stone-800/70 p-3.5 rounded-xl border border-paper-300 dark:border-stone-700">
         <div class="space-y-1">
-          <label for="batch-default-status" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Adicionar todos na lista:</label>
-          <select id="batch-default-status" class="w-full px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
-            <option value="backlog">⏳ Quero Ler (Backlog)</option>
-            <option value="completed">✓ Lidos (Concluídos)</option>
-            <option value="reading">📖 Lendo Agora</option>
-          </select>
+          <label class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Lista na Estante (para todos do lote):</label>
+          <input type="hidden" id="batch-default-status" value="backlog" />
+          <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700">
+            <button type="button" id="batch-seg-backlog" onclick="setBatchDefaultStatus('backlog')" class="py-1.5 px-2 rounded-lg text-xs font-semibold transition-all bg-burgundy-600 dark:bg-amber-600 text-white shadow-xs">
+              Quero Ler
+            </button>
+            <button type="button" id="batch-seg-reading" onclick="setBatchDefaultStatus('reading')" class="py-1.5 px-2 rounded-lg text-xs font-semibold transition-all text-paper-600 dark:text-paper-400">
+              Lendo Agora
+            </button>
+            <button type="button" id="batch-seg-completed" onclick="setBatchDefaultStatus('completed')" class="py-1.5 px-2 rounded-lg text-xs font-semibold transition-all text-paper-600 dark:text-paper-400">
+              Lido
+            </button>
+          </div>
         </div>
         <div class="space-y-1">
           <label for="batch-default-format" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Formato de leitura:</label>
@@ -855,7 +870,7 @@
         <div class="sm:col-span-2 pt-2 border-t border-paper-300/70 dark:border-stone-700/70">
           <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
             <input type="checkbox" id="batch-skip-dates-input" checked class="w-4 h-4 rounded text-burgundy-600 focus:ring-0" />
-            <span class="text-xs font-medium text-paper-800 dark:text-paper-100">Não incluir livros marcados como "Lidos" no cálculo de velocidade (sem datas conhecidas)</span>
+            <span class="text-xs font-medium text-paper-800 dark:text-paper-100">Não lembro quando li (não incluir livros "Lidos" em Lidos no Ano, Páginas Lidas e Velocidade)</span>
           </label>
         </div>
       </div>

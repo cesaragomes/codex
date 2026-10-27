@@ -22,14 +22,50 @@
       }
     }
 
+    function setModalBookStatus(statusVal) {
+      const input = document.getElementById('book-status-input');
+      if (input) input.value = statusVal;
+      const options = ['backlog', 'reading', 'completed'];
+      options.forEach(opt => {
+        const btn = document.getElementById('status-seg-' + opt);
+        if (!btn) return;
+        if (opt === statusVal) {
+          btn.className = 'py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-burgundy-600 dark:bg-amber-600 text-white shadow-xs';
+        } else {
+          btn.className = 'py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-paper-600 dark:text-paper-400 hover:text-paper-800 dark:hover:text-paper-200';
+        }
+      });
+      handleModalStatusChange();
+    }
+
+    function setBatchDefaultStatus(statusVal) {
+      const input = document.getElementById('batch-default-status');
+      if (input) input.value = statusVal;
+      const options = ['backlog', 'reading', 'completed'];
+      options.forEach(opt => {
+        const btn = document.getElementById('batch-seg-' + opt);
+        if (!btn) return;
+        if (opt === statusVal) {
+          btn.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold transition-all bg-burgundy-600 dark:bg-amber-600 text-white shadow-xs';
+        } else {
+          btn.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold transition-all text-paper-600 dark:text-paper-400 hover:text-paper-800 dark:hover:text-paper-200';
+        }
+      });
+      // Se já houver candidatos carregados na tabela de lote, atualiza o status deles também
+      if (Array.isArray(batchCandidates) && batchCandidates.length > 0) {
+        batchCandidates.forEach(c => { c.status = statusVal; });
+        renderBatchPreviewTable();
+      }
+    }
+
     function openAddBookModal() {
       document.getElementById('modal-book-title-heading').textContent = 'Catalogar Nova Obra no Acervo';
       document.getElementById('book-id-input').value = '';
       document.getElementById('form-book').reset();
-      document.getElementById('book-status-input').value = 'reading';
       const skipCheckbox = document.getElementById('book-skip-dates-input');
       if (skipCheckbox) skipCheckbox.checked = false;
       handleSkipDatesToggle();
+      setModalBookStatus('reading');
       document.getElementById('book-start-input').value = new Date().toISOString().slice(0, 10);
       document.getElementById('api-search-results').classList.add('hidden');
       document.getElementById('api-search-query').value = '';
@@ -46,7 +82,7 @@
       document.getElementById('book-year-input').value = book.publishedYear || '';
       document.getElementById('book-genre-input').value = book.genre || '';
       document.getElementById('book-pages-input').value = book.pageCount || '';
-      document.getElementById('book-status-input').value = book.status || 'backlog';
+      setModalBookStatus(book.status || 'backlog');
       document.getElementById('book-format-input').value = book.format || 'kindle';
       document.getElementById('book-rating-input').value = book.rating || 0;
       const skipCheckbox = document.getElementById('book-skip-dates-input');

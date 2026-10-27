@@ -9,13 +9,14 @@
         return true;
       });
 
-      const count = completedBooks.length;
-      const kindleCount = completedBooks.filter(b => b.format === 'kindle').length;
-      const physicalCount = completedBooks.filter(b => b.format === 'physical').length;
-      const totalPages = completedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
+      const countedBooks = completedBooks.filter(b => !b.excludeFromSpeedCalc);
+      const count = countedBooks.length;
+      const kindleCount = countedBooks.filter(b => b.format === 'kindle').length;
+      const physicalCount = countedBooks.filter(b => b.format === 'physical').length;
+      const totalPages = countedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
       const avgPages = count > 0 ? Math.round(totalPages / count) : 0;
 
-      const timedBooks = completedBooks.filter(b => !b.excludeFromSpeedCalc && b.daysTaken && Number(b.daysTaken) > 0 && b.pagesPerDay);
+      const timedBooks = countedBooks.filter(b => b.daysTaken && Number(b.daysTaken) > 0 && b.pagesPerDay);
       const timedPages = timedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
       const totalDays = timedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
       const avgDays = timedBooks.length > 0 ? (totalDays / timedBooks.length).toFixed(1) : 0;
