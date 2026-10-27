@@ -145,6 +145,10 @@
 
       <!-- Actions: Add Book, Cloud & Drive Backup, Theme, User -->
       <div class="flex items-center gap-1.5 sm:gap-2">
+        <button type="button" onclick="openBatchImportModal()" title="Importar Lista de Livros em Lote (Gemini IA + ISBN + APIs)" class="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium border border-burgundy-600/40 dark:border-amber-500/40 bg-paper-50 dark:bg-stone-800 text-burgundy-600 dark:text-amber-400 hover:bg-burgundy-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white shadow-xs transition-colors flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span class="hidden lg:inline">Importar Lote (IA)</span>
+        </button>
         <button type="button" onclick="openAddBookModal()" class="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-burgundy-600 hover:bg-burgundy-700 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm transition-colors flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           <span class="hidden md:inline">Adicionar Livro</span>
@@ -759,6 +763,107 @@
         <button type="button" onclick="closeBackupModal()" class="px-4 py-2 rounded-xl text-xs font-medium bg-paper-200 dark:bg-stone-800 text-paper-700 dark:text-paper-300">
           Fechar
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 4: IMPORTADOR EM LOTE (GEMINI IA + MULTI-API ISBN/CAPAS) ==================== -->
+  <div id="modal-batch-import" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-paper-100 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto literary-scroll">
+      <div class="flex items-start justify-between border-b border-paper-300 dark:border-stone-800 pb-3">
+        <div>
+          <div class="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-burgundy-600 dark:text-amber-400">
+            <span>✨ Gemini 2.5 Flash + BrasilAPI CBL + Google Books + OpenLibrary</span>
+          </div>
+          <h2 class="font-editorial text-lg sm:text-xl font-bold text-paper-800 dark:text-paper-100 mt-0.5">Importação Inteligente de Livros em Lote</h2>
+          <p class="text-xs text-paper-600 dark:text-paper-400">
+            Cole sua lista de livros (um por linha — pode ser só o título, título + autor ou ISBN). O Gemini e as APIs buscam automaticamente ISBN, autor, ano, gênero, número de páginas e capa!
+          </p>
+        </div>
+        <button type="button" onclick="closeBatchImportModal()" class="p-1.5 rounded-lg text-paper-500 hover:bg-paper-200 dark:hover:bg-stone-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Batch Settings Row -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-paper-200/70 dark:bg-stone-800/70 p-3.5 rounded-xl border border-paper-300 dark:border-stone-700">
+        <div class="space-y-1">
+          <label for="batch-default-status" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Status para Todos do Lote:</label>
+          <select id="batch-default-status" class="w-full px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
+            <option value="backlog">⏳ Quero Ler (Backlog)</option>
+            <option value="completed">✓ Lidos (Concluídos)</option>
+            <option value="reading">📖 Lendo Agora</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label for="batch-default-format" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Formato Padrão:</label>
+          <select id="batch-default-format" class="w-full px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
+            <option value="kindle">📱 Kindle (E-reader)</option>
+            <option value="physical">📖 Livro Físico (Papel)</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label for="batch-gemini-key" class="text-xs font-semibold text-paper-700 dark:text-paper-300 flex items-center justify-between">
+            <span>Chave Gemini API (Opcional):</span>
+            <span id="batch-gemini-status" class="text-[10px] font-mono text-emerald-700 dark:text-emerald-400">Híbrido Ativo</span>
+          </label>
+          <input type="password" id="batch-gemini-key" onchange="saveCustomGeminiKey(this.value)" placeholder="Salva via GitHub Secret ou cole aqui..." class="w-full px-3 py-1.5 rounded-lg text-xs font-mono bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100" />
+        </div>
+      </div>
+
+      <!-- Input Textarea -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label for="batch-raw-input" class="text-xs font-semibold text-paper-700 dark:text-paper-300">Cole sua lista de livros abaixo (1 por linha):</label>
+          <button type="button" onclick="fillSampleBatchList()" class="text-[11px] font-medium text-burgundy-600 dark:text-amber-400 hover:underline">
+            Preencher exemplo com 5 clássicos
+          </button>
+        </div>
+        <textarea id="batch-raw-input" rows="5" placeholder="Torto Arado - Itamar Vieira Junior&#10;A Hora da Estrela&#10;O Estrangeiro - Albert Camus&#10;9788535914849&#10;Vidas Secas" class="w-full rounded-xl p-3.5 bg-paper-50 dark:bg-stone-950 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100 text-xs sm:text-sm font-mono focus:outline-none focus:border-burgundy-600 resize-y"></textarea>
+
+        <div class="flex items-center justify-between gap-3 pt-1">
+          <span id="batch-progress-text" class="text-xs font-mono text-paper-600 dark:text-paper-400">Aguardando lista para processar...</span>
+          <button type="button" id="btn-process-batch" onclick="processBatchBooksWithGemini()" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-paper-800 hover:bg-paper-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm transition-colors flex items-center gap-2">
+            <span>✨ Processar Lista com Gemini &amp; APIs</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Table of Resolved Books -->
+      <div id="batch-preview-container" class="hidden space-y-3 pt-2 border-t border-paper-300 dark:border-stone-800">
+        <div class="flex items-center justify-between">
+          <h3 class="font-editorial text-sm sm:text-base font-bold text-paper-800 dark:text-paper-100">
+            Revisão do Lote (<span id="batch-resolved-count">0</span> obras identificadas)
+          </h3>
+          <span class="text-[11px] text-paper-500">Você pode editar qualquer título, página ou status antes de salvar</span>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-paper-300 dark:border-stone-700 bg-paper-50 dark:bg-stone-950 max-h-72 overflow-y-auto literary-scroll">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-paper-200/80 dark:bg-stone-800 text-paper-700 dark:text-paper-300 text-[10px] uppercase tracking-wider sticky top-0">
+                <th class="py-2.5 px-3">Incluir</th>
+                <th class="py-2.5 px-2">Capa</th>
+                <th class="py-2.5 px-2">Título Identificado</th>
+                <th class="py-2.5 px-2">Autor(a)</th>
+                <th class="py-2.5 px-2">ISBN / Ano</th>
+                <th class="py-2.5 px-2">Páginas</th>
+                <th class="py-2.5 px-2">Status</th>
+                <th class="py-2.5 px-2">Fonte</th>
+              </tr>
+            </thead>
+            <tbody id="batch-preview-tbody" class="divide-y divide-paper-300/60 dark:divide-stone-800"></tbody>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="closeBatchImportModal()" class="px-4 py-2 rounded-xl text-xs font-medium text-paper-600 dark:text-paper-400 hover:bg-paper-200 dark:hover:bg-stone-800">
+            Cancelar
+          </button>
+          <button type="button" id="btn-confirm-batch-save" onclick="confirmSaveBatchBooks()" class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-burgundy-600 hover:bg-burgundy-700 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-md transition-colors">
+            + Adicionar Todos os Selecionados à Estante
+          </button>
+        </div>
       </div>
     </div>
   </div>
