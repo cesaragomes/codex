@@ -58,7 +58,6 @@
     };
   </script>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="manifest" href="manifest.json" />
 </head>
 <body class="min-h-screen flex flex-col selection:bg-amber-700/20 selection:text-amber-900 dark:selection:bg-amber-500/30 dark:selection:text-amber-100">
 
@@ -72,10 +71,10 @@
       </div>
 
       <div class="space-y-1.5">
-        <span class="text-[11px] font-mono uppercase tracking-widest text-burgundy-600 dark:text-amber-400">Acesso Privado &amp; Nuvem</span>
+        <span class="text-[11px] font-mono uppercase tracking-widest text-burgundy-600 dark:text-amber-400">Acesso Privado</span>
         <h1 class="font-editorial text-2xl sm:text-3xl font-bold text-paper-800 dark:text-paper-100">Codex Literário</h1>
         <p class="text-xs sm:text-sm text-paper-600 dark:text-paper-400 leading-relaxed">
-          Oficina pessoal de leitura e resenhas críticas em 3 atos. Sincronizado com Firebase Cloud Firestore e Google Drive.
+          Oficina pessoal de leitura, anotações e resenhas críticas em 3 atos.
         </p>
       </div>
 
@@ -102,9 +101,7 @@
         </button>
       </div>
 
-      <p class="text-[11px] text-paper-500 leading-normal">
-        No GitHub Pages (`*.github.io`), o login autentica sua conta Google, sincroniza com o Firestore `codex-literario` e habilita backup direto no seu Google Drive.
-      </p>
+      
     </div>
   </div>
 
@@ -145,9 +142,9 @@
 
       <!-- Actions: Add Book, Cloud & Drive Backup, Theme, User -->
       <div class="flex items-center gap-1.5 sm:gap-2">
-        <button type="button" onclick="openBatchImportModal()" title="Importar Lista de Livros em Lote (Gemini IA + ISBN + APIs)" class="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium border border-burgundy-600/40 dark:border-amber-500/40 bg-paper-50 dark:bg-stone-800 text-burgundy-600 dark:text-amber-400 hover:bg-burgundy-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white shadow-xs transition-colors flex items-center gap-1.5">
+        <button type="button" onclick="openBatchImportModal()" title="Importação de Livros em Lote" class="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium border border-burgundy-600/40 dark:border-amber-500/40 bg-paper-50 dark:bg-stone-800 text-burgundy-600 dark:text-amber-400 hover:bg-burgundy-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white shadow-xs transition-colors flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          <span class="hidden lg:inline">Importar Lote (IA)</span>
+          <span class="hidden lg:inline">Importar em Lote</span>
         </button>
         <button type="button" onclick="openAddBookModal()" class="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-burgundy-600 hover:bg-burgundy-700 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm transition-colors flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -178,11 +175,11 @@
           <div class="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-burgundy-600 dark:text-amber-400">
             <span>Do Consumo à Produção Ativa</span>
             <span>•</span>
-            <span id="db-engine-badge" class="font-mono text-[11px] bg-paper-300/70 dark:bg-stone-800 px-2 py-0.5 rounded">IndexedDB + Firebase Cloud</span>
+            <span id="db-engine-badge" class="font-mono text-[11px] bg-paper-300/70 dark:bg-stone-800 px-2 py-0.5 rounded">Acervo Pessoal</span>
           </div>
           <h1 class="font-editorial text-xl sm:text-2xl font-bold text-paper-800 dark:text-paper-100">Sua Estante &amp; Caderno de Leituras</h1>
           <p class="text-xs sm:text-sm text-paper-600 dark:text-paper-400 max-w-2xl">
-            Sincronizado entre computador e celular via Firestore: registre notas ao longo da leitura e transforme cada obra concluída em uma resenha estruturada em 3 atos.
+            Registre notas ao longo da leitura no Kindle ou livro físico e transforme cada obra concluída em uma resenha estruturada em 3 atos.
           </p>
         </div>
 
@@ -543,7 +540,7 @@
       <div class="flex items-center justify-between border-b border-paper-300 dark:border-stone-800 pb-3">
         <div>
           <h2 id="modal-book-title-heading" class="font-editorial text-lg sm:text-xl font-bold text-paper-800 dark:text-paper-100">Catalogar Obra no Acervo</h2>
-          <p class="text-xs text-paper-600 dark:text-paper-400">Busca inteligente por Título, Autor ou ISBN (BrasilAPI CBL + Google Books + OpenLibrary)</p>
+          <p class="text-xs text-paper-600 dark:text-paper-400">Busque pelo título, autor ou ISBN para preencher os dados automaticamente</p>
         </div>
         <button type="button" onclick="closeAddBookModal()" class="p-1.5 rounded-lg text-paper-500 hover:bg-paper-200 dark:hover:bg-stone-800">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -553,8 +550,7 @@
       <!-- Multi-Engine Book Search Box -->
       <div id="api-search-section" class="bg-paper-200/70 dark:bg-stone-800/70 p-3.5 rounded-xl border border-paper-300 dark:border-stone-700 space-y-2.5">
         <div class="flex items-center justify-between">
-          <label for="api-search-query" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Buscar Capa, Páginas e Metadados (Título, Autor ou ISBN-10/13):</label>
-          <span class="text-[10px] font-mono text-burgundy-600 dark:text-amber-400">3 Motores Ativos</span>
+          <label for="api-search-query" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Buscar por Título, Autor ou ISBN:</label>
         </div>
         <div class="flex gap-2">
           <input type="text" id="api-search-query" onkeydown="if(event.key==='Enter'){event.preventDefault();searchBooksAPI();}" placeholder="Ex: Torto Arado, 9788535932874, Crime e Castigo..." class="flex-1 px-3 py-2 rounded-lg text-xs sm:text-sm bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100 focus:outline-none focus:border-burgundy-600" />
@@ -695,7 +691,7 @@
       <div class="flex items-center justify-between border-b border-paper-300 dark:border-stone-800 pb-3">
         <div>
           <h2 class="font-editorial text-lg font-bold text-paper-800 dark:text-paper-100">Sincronização em Nuvem &amp; Backups</h2>
-          <p class="text-xs text-paper-600 dark:text-paper-400">Firebase Firestore (`codex-literario`), Google Drive e Arquivos Locais</p>
+          <p class="text-xs text-paper-600 dark:text-paper-400">Sincronização entre dispositivos, Google Drive e exportação local</p>
         </div>
         <button type="button" onclick="closeBackupModal()" class="p-1.5 rounded-lg text-paper-500 hover:bg-paper-200 dark:hover:bg-stone-800">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -706,11 +702,11 @@
         <!-- 1. Firebase Cloud Firestore Live Sync -->
         <div class="p-4 rounded-xl bg-paper-50 dark:bg-stone-800/80 border border-paper-300 dark:border-stone-700 space-y-2.5">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-paper-800 dark:text-paper-100">1. Nuvem Firebase (Cloud Firestore)</h3>
+            <h3 class="text-sm font-semibold text-paper-800 dark:text-paper-100">1. Sincronização na Nuvem</h3>
             <span id="modal-firestore-badge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-600/15 text-emerald-700 dark:text-emerald-300">Conectado</span>
           </div>
           <p class="text-xs text-paper-600 dark:text-paper-400">
-            Sincroniza automaticamente seus livros, notas e resenhas com o projeto <code>codex-literario</code> para acesso imediato no celular e no computador.
+            Mantém seus livros, notas e resenhas sincronizados entre o computador e o celular.
           </p>
           <div class="flex flex-wrap gap-2">
             <button type="button" onclick="pushAllToFirestore(false)" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-burgundy-600 hover:bg-burgundy-700 dark:bg-amber-600 text-white">
@@ -726,10 +722,10 @@
         <div class="p-4 rounded-xl bg-paper-50 dark:bg-stone-800/80 border border-paper-300 dark:border-stone-700 space-y-2.5">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold text-paper-800 dark:text-paper-100">2. Backup Direto no Google Drive</h3>
-            <span class="text-[11px] font-mono text-paper-500">API Google Drive v3</span>
+            
           </div>
           <p class="text-xs text-paper-600 dark:text-paper-400">
-            Salva ou restaura o arquivo <code>codex-cloud-backup.json</code> diretamente no seu Google Drive usando o token de autenticação da sua conta Google.
+            Salva ou restaura uma cópia completa do seu acervo diretamente na sua conta do Google Drive.
           </p>
           <div class="flex flex-wrap gap-2">
             <button type="button" id="btn-drive-save" onclick="backupToGoogleDrive()" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white">
@@ -767,17 +763,14 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL 4: IMPORTADOR EM LOTE (GEMINI IA + MULTI-API ISBN/CAPAS) ==================== -->
+  <!-- ==================== MODAL 4: IMPORTAÇÃO DE LIVROS EM LOTE ==================== -->
   <div id="modal-batch-import" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
     <div class="bg-paper-100 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto literary-scroll">
       <div class="flex items-start justify-between border-b border-paper-300 dark:border-stone-800 pb-3">
         <div>
-          <div class="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-burgundy-600 dark:text-amber-400">
-            <span>✨ Gemini 2.5 Flash + BrasilAPI CBL + Google Books + OpenLibrary</span>
-          </div>
-          <h2 class="font-editorial text-lg sm:text-xl font-bold text-paper-800 dark:text-paper-100 mt-0.5">Importação Inteligente de Livros em Lote</h2>
-          <p class="text-xs text-paper-600 dark:text-paper-400">
-            Cole sua lista de livros (um por linha — pode ser só o título, título + autor ou ISBN). O Gemini e as APIs buscam automaticamente ISBN, autor, ano, gênero, número de páginas e capa!
+          <h2 class="font-editorial text-lg sm:text-xl font-bold text-paper-800 dark:text-paper-100">Importação de Livros em Lote</h2>
+          <p class="text-xs text-paper-600 dark:text-paper-400 mt-0.5">
+            Cole sua lista de livros (um por linha). O sistema identifica automaticamente título, autor, ano, páginas, ISBN e capa.
           </p>
         </div>
         <button type="button" onclick="closeBatchImportModal()" class="p-1.5 rounded-lg text-paper-500 hover:bg-paper-200 dark:hover:bg-stone-800">
@@ -785,10 +778,10 @@
         </button>
       </div>
 
-      <!-- Batch Settings Row -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-paper-200/70 dark:bg-stone-800/70 p-3.5 rounded-xl border border-paper-300 dark:border-stone-700">
+      <!-- Batch Settings Row (Apenas Status e Formato Padrão) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-paper-200/70 dark:bg-stone-800/70 p-3.5 rounded-xl border border-paper-300 dark:border-stone-700">
         <div class="space-y-1">
-          <label for="batch-default-status" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Status para Todos do Lote:</label>
+          <label for="batch-default-status" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Adicionar todos na lista:</label>
           <select id="batch-default-status" class="w-full px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
             <option value="backlog">⏳ Quero Ler (Backlog)</option>
             <option value="completed">✓ Lidos (Concluídos)</option>
@@ -796,35 +789,28 @@
           </select>
         </div>
         <div class="space-y-1">
-          <label for="batch-default-format" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Formato Padrão:</label>
+          <label for="batch-default-format" class="text-xs font-semibold text-paper-700 dark:text-paper-300 block">Formato de leitura:</label>
           <select id="batch-default-format" class="w-full px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
             <option value="kindle">📱 Kindle (E-reader)</option>
             <option value="physical">📖 Livro Físico (Papel)</option>
           </select>
-        </div>
-        <div class="space-y-1">
-          <label for="batch-gemini-key" class="text-xs font-semibold text-paper-700 dark:text-paper-300 flex items-center justify-between">
-            <span>Chave Gemini API (Opcional):</span>
-            <span id="batch-gemini-status" class="text-[10px] font-mono text-emerald-700 dark:text-emerald-400">Híbrido Ativo</span>
-          </label>
-          <input type="password" id="batch-gemini-key" onchange="saveCustomGeminiKey(this.value)" placeholder="Salva via GitHub Secret ou cole aqui..." class="w-full px-3 py-1.5 rounded-lg text-xs font-mono bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100" />
         </div>
       </div>
 
       <!-- Input Textarea -->
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <label for="batch-raw-input" class="text-xs font-semibold text-paper-700 dark:text-paper-300">Cole sua lista de livros abaixo (1 por linha):</label>
+          <label for="batch-raw-input" class="text-xs font-semibold text-paper-700 dark:text-paper-300">Lista de livros (1 por linha):</label>
           <button type="button" onclick="fillSampleBatchList()" class="text-[11px] font-medium text-burgundy-600 dark:text-amber-400 hover:underline">
-            Preencher exemplo com 5 clássicos
+            Preencher exemplo
           </button>
         </div>
-        <textarea id="batch-raw-input" rows="5" placeholder="Torto Arado - Itamar Vieira Junior&#10;A Hora da Estrela&#10;O Estrangeiro - Albert Camus&#10;9788535914849&#10;Vidas Secas" class="w-full rounded-xl p-3.5 bg-paper-50 dark:bg-stone-950 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100 text-xs sm:text-sm font-mono focus:outline-none focus:border-burgundy-600 resize-y"></textarea>
+        <textarea id="batch-raw-input" rows="6" placeholder="Manifesto do Partido Comunista (Karl Marx e Friedrich Engels)&#10;O Capital (Karl Marx) — A crítica definitiva ao modo de produção capitalista&#10;Torto Arado - Itamar Vieira Junior&#10;9788535914849" class="w-full rounded-xl p-3.5 bg-paper-50 dark:bg-stone-950 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100 text-xs sm:text-sm font-mono focus:outline-none focus:border-burgundy-600 resize-y"></textarea>
 
         <div class="flex items-center justify-between gap-3 pt-1">
-          <span id="batch-progress-text" class="text-xs font-mono text-paper-600 dark:text-paper-400">Aguardando lista para processar...</span>
+          <span id="batch-progress-text" class="text-xs font-mono text-paper-600 dark:text-paper-400"></span>
           <button type="button" id="btn-process-batch" onclick="processBatchBooksWithGemini()" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-paper-800 hover:bg-paper-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm transition-colors flex items-center gap-2">
-            <span>✨ Processar Lista com Gemini &amp; APIs</span>
+            <span>Buscar Dados da Lista</span>
           </button>
         </div>
       </div>
@@ -833,9 +819,9 @@
       <div id="batch-preview-container" class="hidden space-y-3 pt-2 border-t border-paper-300 dark:border-stone-800">
         <div class="flex items-center justify-between">
           <h3 class="font-editorial text-sm sm:text-base font-bold text-paper-800 dark:text-paper-100">
-            Revisão do Lote (<span id="batch-resolved-count">0</span> obras identificadas)
+            Livros Identificados (<span id="batch-resolved-count">0</span>)
           </h3>
-          <span class="text-[11px] text-paper-500">Você pode editar qualquer título, página ou status antes de salvar</span>
+          <span class="text-[11px] text-paper-500">Confira ou ajuste qualquer campo antes de salvar</span>
         </div>
 
         <div class="overflow-x-auto rounded-xl border border-paper-300 dark:border-stone-700 bg-paper-50 dark:bg-stone-950 max-h-72 overflow-y-auto literary-scroll">
@@ -844,12 +830,11 @@
               <tr class="bg-paper-200/80 dark:bg-stone-800 text-paper-700 dark:text-paper-300 text-[10px] uppercase tracking-wider sticky top-0">
                 <th class="py-2.5 px-3">Incluir</th>
                 <th class="py-2.5 px-2">Capa</th>
-                <th class="py-2.5 px-2">Título Identificado</th>
+                <th class="py-2.5 px-2">Título</th>
                 <th class="py-2.5 px-2">Autor(a)</th>
                 <th class="py-2.5 px-2">ISBN / Ano</th>
                 <th class="py-2.5 px-2">Páginas</th>
                 <th class="py-2.5 px-2">Status</th>
-                <th class="py-2.5 px-2">Fonte</th>
               </tr>
             </thead>
             <tbody id="batch-preview-tbody" class="divide-y divide-paper-300/60 dark:divide-stone-800"></tbody>
@@ -872,10 +857,10 @@
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
   <script src="js/workshop.js"></script>
   <script src="js/api.js"></script>
   <script src="js/analytics.js"></script>
   <script src="js/export-backup.js"></script>
-  <script src="js/app.js"></script>
 </body>
 </html>

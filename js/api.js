@@ -277,8 +277,9 @@
       showToast(`"${book.title}" removido do acervo.`);
     }
 
-// =========================================================================
-    // 6B. IMPORTADOR EM LOTE COM GEMINI 2.5 FLASH + MULTI-API (ISBN & CAPAS)
+
+    // =========================================================================
+    // 6B. IMPORTAÇÃO DE LIVROS EM LOTE (PARSER INTELIGENTE + GEMINI + CATÁLOGOS)
     // =========================================================================
     const _injectedGeminiKey = "__CODEX_GEMINI_API_KEY__";
     let batchCandidates = [];
@@ -288,45 +289,17 @@
         return _injectedGeminiKey;
       }
       try {
-        return localStorage.getItem('codex_gemini_api_key') || '';
-      } catch (e) {
-        return '';
-      }
-    }
-
-    function saveCustomGeminiKey(val) {
-      const cleaned = (val || '').trim();
-      try {
-        if (cleaned) {
-          localStorage.setItem('codex_gemini_api_key', cleaned);
-          showToast('Chave da Gemini API salva localmente no seu navegador!');
-        } else {
-          localStorage.removeItem('codex_gemini_api_key');
-        }
+        const localGemini = localStorage.getItem('codex_gemini_api_key');
+        if (localGemini) return localGemini;
       } catch (e) {}
-      updateGeminiKeyBadge();
-    }
-
-    function updateGeminiKeyBadge() {
-      const badge = document.getElementById('batch-gemini-status');
-      const input = document.getElementById('batch-gemini-key');
-      const activeKey = getActiveGeminiKey();
-      if (input && activeKey && !input.value) {
-        input.value = activeKey;
+      // Usa a chave do projeto Google Cloud / Firebase caso a Generative Language API esteja ativa no mesmo projeto
+      if (firebaseConfig && firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("__CODEX_")) {
+        return firebaseConfig.apiKey;
       }
-      if (badge) {
-        if (activeKey) {
-          badge.textContent = '✨ Gemini IA Conectado';
-          badge.className = 'text-[10px] font-mono text-emerald-700 dark:text-emerald-400';
-        } else {
-          badge.textContent = 'Busca Tripla API Ativa';
-          badge.className = 'text-[10px] font-mono text-amber-700 dark:text-amber-400';
-        }
-      }
+      return '';
     }
 
     function openBatchImportModal() {
-      updateGeminiKeyBadge();
       document.getElementById('modal-batch-import').classList.remove('hidden');
     }
 
@@ -336,36 +309,102 @@
 
     function fillSampleBatchList() {
       const sample = [
+        'Manifesto do Partido Comunista (Karl Marx e Friedrich Engels) — O texto fundacional',
+        'O Capital (Karl Marx) — A crítica definitiva ao modo de produção capitalista',
+        'A Origem da Família, da Propriedade Privada e do Estado (Friedrich Engels)',
         'Torto Arado - Itamar Vieira Junior',
-        'A Hora da Estrela - Clarice Lispector',
-        '1984 - George Orwell',
-        'Dom Casmurro - Machado de Assis',
-        'O Estrangeiro - Albert Camus'
+        'A Hora da Estrela (Clarice Lispector)'
       ].join('\n');
       document.getElementById('batch-raw-input').value = sample;
     }
 
-    async function enrichSingleBookFromPublicAPIs(itemQuery, initialData = {}) {
-      const raw = String(itemQuery || initialData.isbn || initialData.title || '').trim();
-      const cleanedDigits = (initialData.isbn || raw).replace(/[-\s]/g, '');
-      const isIsbn = /^(978|979)?\d{9}[\dXx]$/.test(cleanedDigits);
+    // Extrai Título Limpo, Autor e ISBN mesmo quando a linha vem com parênteses, travessões e resumos
+    function parseRawBookLine(rawLine) {
+      let line = String(rawLine || '')
+        .replace(/^\s*(?:\d+[.)\-\s]+|[-*•]\s*)/, '')
+        .replace(/[*_~`]/g, '')
+        .trim();
+
+      let extractedIsbn = '';
+      const isbnMatch = line.match(/\b((?:978|979)[-\s]?\d[\d-\s]{8,11}[\dXx]|\d{9}[\dXx])\b/);
+      if (isbnMatch) {
+        extractedIsbn = isbnMatch[1].replace(/[-\s]/g, '');
+      }
+
+      // Caso 1: "Título da Obra (Autor) — Descrição opcional" ou "Título (Autor) - Descrição"
+      const parenAuthorMatch = line.match(/^(.+?)\s*\(([^)]+)\)\s*(?:[—–\-:]\s*(.*))?$/);
+      if (parenAuthorMatch) {
+        const candidateTitle = parenAuthorMatch[1].trim().replace(/^["'“”«»]|["'“”«»]$/g, '');
+        const insideParen = parenAuthorMatch[2].trim();
+        // Se dentro do parêntese não for apenas um ano de 4 dígitos, é o autor
+        if (!/^\d{4}$/.test(insideParen)) {
+          return {
+            cleanTitle: candidateTitle,
+            cleanAuthor: insideParen,
+            isbn: extractedIsbn
+          };
+        }
+      }
+
+      // Remove descrições longas após travessão duplo/em-dash " — " quando o título já está antes
+      if (line.includes(' — ')) {
+        const dashParts = line.split(' — ');
+        const left = dashParts[0].trim();
+        const right = dashParts.slice(1).join(' — ').trim();
+        // Se o lado direito tem até 4 palavras e parece nome de autor, usa como autor; senão descarta como resumo
+        if (right.split(/\s+/).length <= 4 && !/[.!?,;]/.test(right)) {
+          return { cleanTitle: left, cleanAuthor: right, isbn: extractedIsbn };
+        }
+        line = left;
+      }
+
+      // Caso 2: "Título - Autor" ou "Título – Autor"
+      const sepMatch = line.match(/^(.+?)\s+[-–]\s+([^—–\-]+)$/);
+      if (sepMatch) {
+        const left = sepMatch[1].trim();
+        const right = sepMatch[2].trim();
+        if (right.split(/\s+/).length <= 6) {
+          return { cleanTitle: left, cleanAuthor: right, isbn: extractedIsbn };
+        }
+        return { cleanTitle: left, cleanAuthor: '', isbn: extractedIsbn };
+      }
+
+      // Caso 3: "Título, de Autor" ou "Título por Autor"
+      const byMatch = line.match(/^(.+?)(?:,\s*de|\s+por)\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú.]+){0,4})$/);
+      if (byMatch) {
+        return { cleanTitle: byMatch[1].trim(), cleanAuthor: byMatch[2].trim(), isbn: extractedIsbn };
+      }
+
+      return {
+        cleanTitle: line.replace(/^["'“”«»]|["'“”«»]$/g, '').trim(),
+        cleanAuthor: '',
+        isbn: extractedIsbn
+      };
+    }
+
+    async function enrichSingleBookFromPublicAPIs(rawLine, initialData = {}) {
+      const parsedLine = parseRawBookLine(rawLine);
+      const cleanTitle = (initialData.title || parsedLine.cleanTitle || rawLine).trim();
+      const cleanAuthor = (initialData.author && initialData.author !== 'Autor desconhecido')
+        ? initialData.author.trim()
+        : (parsedLine.cleanAuthor || '');
+      const cleanIsbn = (initialData.isbn || parsedLine.isbn || '').replace(/[-\s]/g, '');
+      const hasValidIsbn = /^(978|979)?\d{9}[\dXx]$/.test(cleanIsbn);
 
       let resolved = {
-        title: initialData.title || raw,
-        author: initialData.author || 'Autor desconhecido',
+        title: cleanTitle,
+        author: cleanAuthor || 'Autor desconhecido',
         publishedYear: initialData.publishedYear || '',
         genre: initialData.genre || 'Literatura',
         pageCount: Number(initialData.pageCount) || 0,
-        isbn: initialData.isbn || (isIsbn ? cleanedDigits : ''),
-        coverUrl: initialData.coverUrl || '',
-        source: initialData.source || 'Catálogo'
+        isbn: hasValidIsbn ? cleanIsbn : '',
+        coverUrl: initialData.coverUrl || ''
       };
 
-      // 1. Se tiver ISBN válido, tenta BrasilAPI ISBN (CBL)
-      if (resolved.isbn && /^(978|979)?\d{9}[\dXx]$/.test(resolved.isbn.replace(/[-\s]/g, ''))) {
-        const cleanIsbn = resolved.isbn.replace(/[-\s]/g, '');
+      // 1. Se tiver ISBN válido, consulta BrasilAPI ISBN (CBL)
+      if (resolved.isbn) {
         try {
-          const brRes = await fetch(`https://brasilapi.com.br/api/isbn/v1/${cleanIsbn}`);
+          const brRes = await fetch(`https://brasilapi.com.br/api/isbn/v1/${resolved.isbn}`);
           if (brRes.ok) {
             const brData = await brRes.json();
             if (brData && brData.title) {
@@ -375,104 +414,112 @@
               if (Array.isArray(brData.subjects) && brData.subjects[0]) resolved.genre = brData.subjects[0];
               if (brData.page_count) resolved.pageCount = Number(brData.page_count);
               if (brData.cover_url) resolved.coverUrl = brData.cover_url;
-              resolved.source = resolved.source.includes('Gemini') ? 'Gemini + CBL' : 'BrasilAPI CBL';
             }
           }
         } catch (e) {}
       }
 
-      // 2. Consulta Google Books para garantir capa de alta resolução, páginas e ISBN se faltar
+      // 2. Consulta Google Books usando apenas o Título Limpo + Autor Limpo (sem o resumo que quebrava a busca!)
       try {
-        const searchTerms = resolved.title && resolved.author && resolved.author !== 'Autor desconhecido'
-          ? `${resolved.title} ${resolved.author}`
-          : raw;
-        const gRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(searchTerms)}&maxResults=3`);
-        if (gRes.ok) {
-          const gData = await gRes.json();
-          const first = (gData.items || [])[0];
-          if (first && first.volumeInfo) {
-            const info = first.volumeInfo;
-            if (!initialData.title && info.title) {
-              resolved.title = info.subtitle ? `${info.title}: ${info.subtitle}` : info.title;
+        const queryCandidates = [];
+        if (cleanTitle && cleanAuthor) {
+          queryCandidates.push(`intitle:${cleanTitle} inauthor:${cleanAuthor}`);
+          queryCandidates.push(`${cleanTitle} ${cleanAuthor}`);
+        } else {
+          queryCandidates.push(cleanTitle);
+        }
+
+        for (const qStr of queryCandidates) {
+          const gRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(qStr)}&maxResults=4`);
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            const items = gData.items || [];
+            // Escolhe o primeiro item que tenha capa ou contagem de páginas
+            const bestItem = items.find(it => it.volumeInfo?.imageLinks && it.volumeInfo?.pageCount)
+                          || items.find(it => it.volumeInfo?.imageLinks)
+                          || items[0];
+            if (bestItem && bestItem.volumeInfo) {
+              const info = bestItem.volumeInfo;
+              if (info.title && (!initialData.title || resolved.title === rawLine)) {
+                resolved.title = info.title;
+              }
+              if ((!resolved.author || resolved.author === 'Autor desconhecido') && Array.isArray(info.authors)) {
+                resolved.author = info.authors.join(', ');
+              }
+              const yearMatch = (info.publishedDate || '').match(/\d{4}/);
+              if (!resolved.publishedYear && yearMatch) resolved.publishedYear = Number(yearMatch[0]);
+              if ((!resolved.genre || resolved.genre === 'Literatura') && Array.isArray(info.categories) && info.categories[0]) {
+                resolved.genre = info.categories[0];
+              }
+              if (!resolved.pageCount && info.pageCount) resolved.pageCount = Number(info.pageCount);
+              if (!resolved.isbn && Array.isArray(info.industryIdentifiers)) {
+                const isbn13 = info.industryIdentifiers.find(id => id.type === 'ISBN_13') || info.industryIdentifiers[0];
+                if (isbn13) resolved.isbn = isbn13.identifier;
+              }
+              let thumb = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '';
+              if (thumb.startsWith('http://')) thumb = thumb.replace('http://', 'https://');
+              if (thumb && !resolved.coverUrl) resolved.coverUrl = thumb;
+              break;
             }
-            if ((!resolved.author || resolved.author === 'Autor desconhecido') && info.authors) {
-              resolved.author = info.authors.join(', ');
-            }
-            const yearMatch = (info.publishedDate || '').match(/\d{4}/);
-            if (!resolved.publishedYear && yearMatch) resolved.publishedYear = Number(yearMatch[0]);
-            if ((!resolved.genre || resolved.genre === 'Literatura') && info.categories && info.categories[0]) {
-              resolved.genre = info.categories[0];
-            }
-            if (!resolved.pageCount && info.pageCount) resolved.pageCount = Number(info.pageCount);
-            if (!resolved.isbn && Array.isArray(info.industryIdentifiers)) {
-              const isbn13 = info.industryIdentifiers.find(id => id.type === 'ISBN_13') || info.industryIdentifiers[0];
-              if (isbn13) resolved.isbn = isbn13.identifier;
-            }
-            let thumb = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '';
-            if (thumb.startsWith('http://')) thumb = thumb.replace('http://', 'https://');
-            if (thumb && !resolved.coverUrl) resolved.coverUrl = thumb;
-            if (resolved.source === 'Catálogo') resolved.source = 'Google Books';
           }
         }
       } catch (e) {}
 
-      // 3. Fallback OpenLibrary caso ainda falte capa ou páginas
-      if (!resolved.coverUrl || !resolved.pageCount) {
+      // 3. Fallback OpenLibrary (com busca por título limpo + autor limpo)
+      if (!resolved.coverUrl || !resolved.pageCount || resolved.author === 'Autor desconhecido') {
         try {
-          const olRes = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(resolved.title)}&limit=2`);
+          const olQuery = cleanAuthor ? `${cleanTitle} ${cleanAuthor}` : cleanTitle;
+          const olRes = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(olQuery)}&limit=3`);
           if (olRes.ok) {
             const olData = await olRes.json();
-            const doc = (olData.docs || [])[0];
-            if (doc) {
+            const docs = olData.docs || [];
+            const bestDoc = docs.find(d => d.cover_i && d.number_of_pages_median) || docs.find(d => d.cover_i) || docs[0];
+            if (bestDoc) {
               if (!resolved.author || resolved.author === 'Autor desconhecido') {
-                resolved.author = (doc.author_name && doc.author_name[0]) || resolved.author;
+                resolved.author = (bestDoc.author_name && bestDoc.author_name.slice(0, 2).join(', ')) || resolved.author;
               }
-              if (!resolved.publishedYear && doc.first_publish_year) resolved.publishedYear = doc.first_publish_year;
-              if (!resolved.pageCount && doc.number_of_pages_median) resolved.pageCount = doc.number_of_pages_median;
-              if (!resolved.isbn && Array.isArray(doc.isbn) && doc.isbn[0]) resolved.isbn = doc.isbn[0];
-              if (!resolved.coverUrl && doc.cover_i) {
-                resolved.coverUrl = `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`;
+              if (!resolved.publishedYear && bestDoc.first_publish_year) resolved.publishedYear = bestDoc.first_publish_year;
+              if (!resolved.pageCount && bestDoc.number_of_pages_median) resolved.pageCount = bestDoc.number_of_pages_median;
+              if (!resolved.isbn && Array.isArray(bestDoc.isbn) && bestDoc.isbn[0]) resolved.isbn = bestDoc.isbn[0];
+              if (!resolved.coverUrl && bestDoc.cover_i) {
+                resolved.coverUrl = `https://covers.openlibrary.org/b/id/${bestDoc.cover_i}-M.jpg`;
               }
-              if (resolved.source === 'Catálogo') resolved.source = 'OpenLibrary';
             }
           }
         } catch (e) {}
       }
 
-      if (!resolved.pageCount || resolved.pageCount < 1) resolved.pageCount = 240;
+      // 4. Se encontrou ISBN mas ainda está sem capa, usa a capa direta por ISBN da OpenLibrary
+      if (!resolved.coverUrl && resolved.isbn) {
+        resolved.coverUrl = `https://covers.openlibrary.org/b/isbn/${resolved.isbn}-M.jpg`;
+      }
+
+      if (!resolved.pageCount || resolved.pageCount < 1) resolved.pageCount = 220;
       return resolved;
     }
 
-    async function callGeminiStructuredBookParser(lines, apiKey) {
-      const prompt = `Você é um bibliotecário especialista em edições brasileiras e internacionais.
-O usuário colou a seguinte lista de livros (um por linha):
-${lines.map((l, i) => `${i + 1}. ${l}`).join('\n')}
+    async function callGeminiChunk(linesChunk, apiKey) {
+      const prompt = `Extraia e complete os metadados bibliográficos de cada livro abaixo (em português do Brasil).
+Lista:
+${linesChunk.map((l, i) => `${i + 1}. ${l}`).join('\n')}
 
-Para cada linha, retorne os metadados exatos do livro em português (Brasil) no formato JSON (um array de objetos).
-Cada objeto DEVE conter exatamente as propriedades:
-- "title": Título oficial completo em português
-- "author": Nome do(a) autor(a) principal
-- "publishedYear": Ano da publicação original (número inteiro, ex: 1995)
-- "genre": Gênero literário principal em português (ex: "Ficção Contemporânea", "Romance Clássico", "Distopia")
-- "pageCount": Número médio de páginas da edição padrão brasileira (número inteiro, ex: 264)
-- "isbn": ISBN-13 (apenas dígitos, preferencialmente da edição brasileira, ex: "9788535932874")`;
+Retorne APENAS um array JSON com exatamente ${linesChunk.length} objetos na mesma ordem, contendo:
+[{"title": "Título limpo da obra", "author": "Nome do autor", "publishedYear": 1995, "genre": "Gênero literário", "pageCount": 250, "isbn": "ISBN-13 apenas dígitos"}]`;
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const body = {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json"
-        }
-      };
-
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          }
+        })
       });
 
-      if (!res.ok) throw new Error('Falha na chamada Gemini API');
+      if (!res.ok) throw new Error('Gemini API indisponível');
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
       const parsed = JSON.parse(rawText);
@@ -487,7 +534,7 @@ Cada objeto DEVE conter exatamente as propriedades:
         .filter(l => l.length > 1);
 
       if (lines.length === 0) {
-        showToast('Cole pelo menos 1 livro na caixa de texto para processar.');
+        showToast('Cole pelo menos 1 livro na caixa de texto.');
         return;
       }
 
@@ -498,53 +545,83 @@ Cada objeto DEVE conter exatamente as propriedades:
       const geminiKey = getActiveGeminiKey();
 
       btn.disabled = true;
-      btn.innerHTML = `<span>⏳ Identificando ${lines.length} livros...</span>`;
-      progressText.textContent = geminiKey
-        ? `Consultando Gemini 2.5 Flash para estruturar ${lines.length} obras...`
-        : `Consultando BrasilAPI, Google Books e OpenLibrary para ${lines.length} obras...`;
+      btn.innerHTML = `<span>⏳ Buscando ${lines.length} livros...</span>`;
 
-      let geminiStructured = [];
+      // 1. Pre-parse instantâneo de todas as linhas (extrai Título e Autor imediatamente mesmo em listas de 100+ livros)
+      const preParsedList = lines.map(line => parseRawBookLine(line));
+
+      // 2. Se houver chave Gemini ativa, processa em blocos de 25 livros para não estourar limite de tokens
+      let geminiResults = new Array(lines.length).fill(null);
       if (geminiKey) {
-        try {
-          geminiStructured = await callGeminiStructuredBookParser(lines, geminiKey);
-        } catch (err) {
-          console.warn('Fallback de Gemini para APIs públicas:', err);
+        const CHUNK_SIZE = 25;
+        for (let start = 0; start < lines.length; start += CHUNK_SIZE) {
+          const chunkLines = lines.slice(start, start + CHUNK_SIZE);
+          progressText.textContent = `Analisando lista (${Math.min(start + CHUNK_SIZE, lines.length)}/${lines.length})...`;
+          try {
+            const chunkParsed = await callGeminiChunk(chunkLines, geminiKey);
+            for (let j = 0; j < chunkParsed.length; j++) {
+              if (start + j < lines.length) {
+                geminiResults[start + j] = chunkParsed[j];
+              }
+            }
+          } catch (err) {
+            // Se a chave não tiver a API Generative Language habilitada ou falhar, segue com o parser + catálogos
+            break;
+          }
         }
       }
 
-      const results = [];
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        progressText.textContent = `Buscando capa e ISBN (${i + 1}/${lines.length}): "${line.slice(0, 35)}"...`;
-        const aiSeed = geminiStructured[i] ? { ...geminiStructured[i], source: '✨ Gemini IA' } : {};
-
-        if (!aiSeed.title && line.includes(' - ')) {
-          const parts = line.split(' - ');
-          aiSeed.title = parts[0].trim();
-          aiSeed.author = parts.slice(1).join(' - ').trim();
+      // 3. Enriquece capas, páginas e ISBN em pequenos lotes paralelos de 3 (com pausa curta para evitar bloqueio/rate-limit em 100+ livros)
+      const results = new Array(lines.length);
+      const CONCURRENCY = 3;
+      for (let i = 0; i < lines.length; i += CONCURRENCY) {
+        const sliceIndices = [];
+        for (let k = i; k < Math.min(i + CONCURRENCY, lines.length); k++) {
+          sliceIndices.push(k);
         }
+        progressText.textContent = `Buscando capas e páginas (${Math.min(i + CONCURRENCY, lines.length)} de ${lines.length})...`;
 
-        const enriched = await enrichSingleBookFromPublicAPIs(line, aiSeed);
-        results.push({
-          selected: true,
-          title: enriched.title,
-          author: enriched.author,
-          publishedYear: enriched.publishedYear || '',
-          genre: enriched.genre || 'Literatura',
-          pageCount: enriched.pageCount || 240,
-          isbn: enriched.isbn || '',
-          coverUrl: enriched.coverUrl || '',
-          status: defaultStatus,
-          format: defaultFormat,
-          source: enriched.source
-        });
+        await Promise.all(sliceIndices.map(async (idx) => {
+          const line = lines[idx];
+          const localParsed = preParsedList[idx];
+          const aiData = geminiResults[idx] || {};
+          const seed = {
+            title: aiData.title || localParsed.cleanTitle,
+            author: aiData.author || localParsed.cleanAuthor,
+            publishedYear: aiData.publishedYear || '',
+            genre: aiData.genre || 'Literatura',
+            pageCount: aiData.pageCount || 0,
+            isbn: aiData.isbn || localParsed.isbn || ''
+          };
+          const enriched = await enrichSingleBookFromPublicAPIs(line, seed);
+          results[idx] = {
+            selected: true,
+            title: enriched.title,
+            author: enriched.author,
+            publishedYear: enriched.publishedYear || '',
+            genre: enriched.genre || 'Literatura',
+            pageCount: enriched.pageCount || 220,
+            isbn: enriched.isbn || '',
+            coverUrl: enriched.coverUrl || '',
+            status: defaultStatus,
+            format: defaultFormat
+          };
+        }));
+
+        // Renderiza parcialmente a tabela em tempo real para o usuário ver o progresso
+        batchCandidates = results.filter(Boolean);
+        renderBatchPreviewTable();
+
+        if (i + CONCURRENCY < lines.length) {
+          await new Promise(r => setTimeout(r, 180));
+        }
       }
 
-      batchCandidates = results;
+      batchCandidates = results.filter(Boolean);
       renderBatchPreviewTable();
-      progressText.textContent = `✓ ${results.length} livros identificados e prontos para revisão!`;
+      progressText.textContent = `✓ ${batchCandidates.length} livros prontos para adicionar.`;
       btn.disabled = false;
-      btn.innerHTML = `<span>✨ Processar Lista com Gemini &amp; APIs</span>`;
+      btn.innerHTML = `<span>Buscar Dados da Lista</span>`;
     }
 
     function renderBatchPreviewTable() {
@@ -567,13 +644,13 @@ Cada objeto DEVE conter exatamente as propriedades:
             }
           </td>
           <td class="py-2 px-2">
-            <input type="text" value="${escapeHtml(item.title)}" oninput="batchCandidates[${idx}].title = this.value" class="w-full min-w-[160px] px-2 py-1 rounded bg-paper-100 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 font-editorial font-bold text-xs text-paper-800 dark:text-paper-100" />
+            <input type="text" value="${escapeHtml(item.title)}" oninput="batchCandidates[${idx}].title = this.value" class="w-full min-w-[180px] px-2 py-1 rounded bg-paper-100 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 font-editorial font-bold text-xs text-paper-800 dark:text-paper-100" />
           </td>
           <td class="py-2 px-2">
-            <input type="text" value="${escapeHtml(item.author)}" oninput="batchCandidates[${idx}].author = this.value" class="w-full min-w-[130px] px-2 py-1 rounded bg-paper-100 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-xs text-paper-700 dark:text-paper-300" />
+            <input type="text" value="${escapeHtml(item.author)}" oninput="batchCandidates[${idx}].author = this.value" class="w-full min-w-[140px] px-2 py-1 rounded bg-paper-100 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-xs text-paper-700 dark:text-paper-300" />
           </td>
           <td class="py-2 px-2 font-mono text-[11px] text-paper-600 dark:text-paper-400">
-            <div>${escapeHtml(item.isbn || 'S/ ISBN')}</div>
+            <div>${escapeHtml(item.isbn || '—')}</div>
             <div class="text-[10px] opacity-75">${item.publishedYear || '—'} • ${escapeHtml(item.genre)}</div>
           </td>
           <td class="py-2 px-2">
@@ -585,9 +662,6 @@ Cada objeto DEVE conter exatamente as propriedades:
               <option value="completed" ${item.status === 'completed' ? 'selected' : ''}>Lido</option>
               <option value="reading" ${item.status === 'reading' ? 'selected' : ''}>Lendo</option>
             </select>
-          </td>
-          <td class="py-2 px-2">
-            <span class="px-1.5 py-0.5 rounded bg-paper-200 dark:bg-stone-800 font-mono text-[10px] text-burgundy-600 dark:text-amber-400">${escapeHtml(item.source)}</span>
           </td>
         </tr>
       `).join('');
@@ -612,7 +686,7 @@ Cada objeto DEVE conter exatamente as propriedades:
       const booksToInsert = selected.map((item, idx) => {
         const isCompleted = item.status === 'completed';
         const isReading = item.status === 'reading';
-        const pages = Math.max(1, Number(item.pageCount) || 240);
+        const pages = Math.max(1, Number(item.pageCount) || 220);
         return {
           title: item.title.trim(),
           author: (item.author || 'Autor desconhecido').trim(),
@@ -647,5 +721,5 @@ Cada objeto DEVE conter exatamente as propriedades:
       document.getElementById('batch-preview-container').classList.add('hidden');
       await refreshStateFromDB();
       await pushAllToFirestore(true);
-      showToast(`🎉 ${booksToInsert.length} livros adicionados em lote e sincronizados na nuvem!`);
+      showToast(`🎉 ${booksToInsert.length} livros adicionados à estante!`);
     }
