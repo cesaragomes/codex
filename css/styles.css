@@ -42,3 +42,22 @@
       line-height: 1.8;
       font-family: 'Lora', Georgia, serif;
     }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .safe-bottom-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    @media (max-width: 767px) {
+      main.mobile-safe-main {
+        padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+      }
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+    }

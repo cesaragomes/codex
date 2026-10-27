@@ -1,12 +1,16 @@
 // =========================================================================
     // 2. NAVIGATION & THEME
     // =========================================================================
+    let deferredPwaPrompt = null;
+    let mobileWorkshopPane = 'all';
+
     function switchMainView(viewName) {
       state.currentView = viewName;
       const views = ['shelf', 'workshop', 'analytics'];
       views.forEach(v => {
         const sec = document.getElementById('view-' + v);
         const btn = document.getElementById('nav-btn-' + v);
+        const mobBtn = document.getElementById('mob-nav-' + v);
         if (sec) sec.classList.toggle('hidden', v !== viewName);
         if (btn) {
           if (v === viewName) {
@@ -15,11 +19,84 @@
             btn.className = 'px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 text-paper-600 dark:text-paper-400 hover:text-paper-800 dark:hover:text-paper-100';
           }
         }
+        if (mobBtn) {
+          if (v === viewName) {
+            mobBtn.className = 'flex flex-col items-center justify-center gap-0.5 py-1 text-burgundy-600 dark:text-amber-400 font-semibold';
+          } else {
+            mobBtn.className = 'flex flex-col items-center justify-center gap-0.5 py-1 text-paper-500 dark:text-paper-400 font-medium';
+          }
+        }
       });
       if (viewName === 'workshop') {
         renderWorkshop();
       } else if (viewName === 'analytics') {
         renderAnalytics();
+      }
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+    }
+
+    function setMobileWorkshopPane(pane) {
+      mobileWorkshopPane = pane;
+      const editorsCol = document.getElementById('workshop-editors-col');
+      const sidebarCol = document.getElementById('workshop-sidebar-col');
+      const tabs = ['notes', 'acts', 'all'];
+      tabs.forEach(t => {
+        const el = document.getElementById('mob-ws-tab-' + t);
+        if (!el) return;
+        if (t === pane) {
+          el.className = (t === 'all' ? 'py-2 px-2.5 ' : 'flex-1 py-2 px-2 ') + 'rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 bg-paper-50 dark:bg-stone-800 text-burgundy-600 dark:text-amber-400 shadow-xs';
+        } else {
+          el.className = (t === 'all' ? 'py-2 px-2.5 ' : 'flex-1 py-2 px-2 ') + 'rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 text-paper-600 dark:text-paper-400';
+        }
+      });
+      if (!editorsCol || !sidebarCol) return;
+      if (pane === 'notes') {
+        editorsCol.classList.add('hidden', 'lg:block');
+        sidebarCol.classList.remove('hidden');
+      } else if (pane === 'acts') {
+        editorsCol.classList.remove('hidden');
+        sidebarCol.classList.add('hidden', 'lg:block');
+      } else {
+        editorsCol.classList.remove('hidden');
+        sidebarCol.classList.remove('hidden');
+      }
+    }
+
+    async function handleInstallPWA() {
+      if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        const choice = await deferredPwaPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          showToast('Codex instalado com sucesso no seu dispositivo!');
+        }
+        deferredPwaPrompt = null;
+        return;
+      }
+      const modal = document.getElementById('modal-pwa-install');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closePwaInstallModal() {
+      const modal = document.getElementById('modal-pwa-install');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function initPwaSupport() {
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPwaPrompt = e;
+        const btn = document.getElementById('btn-install-pwa');
+        if (btn) btn.classList.remove('hidden');
+      });
+
+      window.addEventListener('appinstalled', () => {
+        deferredPwaPrompt = null;
+        const btn = document.getElementById('btn-install-pwa');
+        if (btn) btn.classList.add('hidden');
+      });
+
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
       }
     }
 

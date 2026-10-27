@@ -215,6 +215,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       loadSavedTheme();
+      initPwaSupport();
       await initDatabase();
       initFirebaseServices();
     });
