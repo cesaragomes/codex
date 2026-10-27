@@ -118,8 +118,8 @@
   <!-- TOP NAVIGATION BAR -->
   <header id="main-header" class="sticky top-0 z-30 border-b border-paper-300 dark:border-stone-800 bg-paper-100/95 dark:bg-paper-900/95 backdrop-blur-md transition-colors">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
-      <!-- Brand -->
-      <div class="flex items-center gap-3">
+      <!-- Brand + Compact Cloud Status Icon (✔ green / ✖ red) -->
+      <div class="flex items-center gap-2.5">
         <button type="button" onclick="switchMainView('shelf')" class="flex items-center gap-2.5 text-left group focus:outline-none">
           <div class="w-9 h-9 rounded-lg bg-burgundy-600 dark:bg-amber-600 text-paper-50 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -131,10 +131,10 @@
             <span class="text-[11px] text-paper-600 dark:text-paper-400 tracking-wider uppercase font-medium">Oficina Literária</span>
           </div>
         </button>
-        <span id="cloud-status-pill" class="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-paper-200 dark:bg-stone-800 text-paper-600 dark:text-paper-400">☁️ Sincronizado</span>
+        <span id="cloud-status-pill" title="Nuvem sincronizada" class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 select-none">✔</span>
       </div>
 
-      <!-- Main Navigation Tabs -->
+      <!-- Main Navigation Tabs (Desktop) -->
       <nav class="hidden md:flex items-center gap-1 bg-paper-200/80 dark:bg-stone-800/80 p-1 rounded-xl border border-paper-300/70 dark:border-stone-700">
         <button type="button" id="nav-btn-shelf" onclick="switchMainView('shelf')" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 bg-paper-50 dark:bg-stone-900 text-burgundy-600 dark:text-amber-400 shadow-sm">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
@@ -150,30 +150,54 @@
         </button>
       </nav>
 
-      <!-- Actions: Add Book, Cloud & Drive Backup, Theme, User -->
-      <div class="flex items-center gap-1.5 sm:gap-2">
-        <button type="button" onclick="openBatchImportModal()" title="Importação de Livros em Lote" class="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium border border-burgundy-600/40 dark:border-amber-500/40 bg-paper-50 dark:bg-stone-800 text-burgundy-600 dark:text-amber-400 hover:bg-burgundy-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white shadow-xs transition-colors flex items-center gap-1.5">
+      <!-- Actions: Batch Import, Add Book & Single Icon-Only Settings Menu -->
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="openBatchImportModal()" title="Importação de Livros em Lote" class="hidden md:flex px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border border-burgundy-600/40 dark:border-amber-500/40 bg-paper-50 dark:bg-stone-800 text-burgundy-600 dark:text-amber-400 hover:bg-burgundy-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white shadow-xs transition-colors items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           <span class="hidden lg:inline">Importar em Lote</span>
         </button>
-        <button type="button" onclick="openAddBookModal()" class="hidden md:flex px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-burgundy-600 hover:bg-burgundy-700 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm transition-colors items-center gap-1.5">
+        <button type="button" onclick="openAddBookModal()" class="hidden md:flex px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium bg-burgundy-600 hover:bg-burgundy-700 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm transition-colors items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           <span class="hidden md:inline">Adicionar Livro</span>
         </button>
-        <button type="button" id="btn-install-pwa" onclick="handleInstallPWA()" title="Instalar Aplicativo no Celular / Computador" class="px-2.5 py-1.5 rounded-lg border border-burgundy-600/30 dark:border-amber-500/30 bg-burgundy-50/70 dark:bg-amber-500/10 text-burgundy-600 dark:text-amber-400 hover:bg-burgundy-600 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white transition-colors flex items-center gap-1 text-xs font-semibold">
-          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          <span class="hidden sm:inline">Instalar App</span>
-        </button>
-        <button type="button" onclick="openBackupModal()" title="Nuvem Firebase, Google Drive &amp; Backups" class="p-2 rounded-lg border border-paper-300 dark:border-stone-700 bg-paper-50 dark:bg-stone-800 text-paper-700 dark:text-paper-300 hover:bg-paper-200 dark:hover:bg-stone-700 transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
-        </button>
-        <button type="button" id="theme-toggle-btn" onclick="toggleTheme()" title="Alternar Modo Papel / Modo Biblioteca Noturna" class="p-2 rounded-lg border border-paper-300 dark:border-stone-700 bg-paper-50 dark:bg-stone-800 text-paper-700 dark:text-paper-300 hover:bg-paper-200 dark:hover:bg-stone-700 transition-colors">
-          <svg id="theme-icon-moon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-          <svg id="theme-icon-sun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-        </button>
-        <button type="button" id="user-auth-btn" onclick="handleUserBadgeClick()" title="Conta Google / Sair" class="px-2.5 py-1.5 rounded-lg border border-paper-300 dark:border-stone-700 bg-paper-50 dark:bg-stone-800 text-xs font-mono text-paper-700 dark:text-paper-300 hover:bg-paper-200 transition-colors flex items-center gap-1.5">
-          <span id="user-auth-label">Entrar</span>
-        </button>
+
+        <!-- Single Icon-Only Settings Button & Dropdown -->
+        <div class="relative" id="settings-menu-container">
+          <button type="button" id="btn-settings-menu" onclick="toggleSettingsMenu(event)" title="Configurações" aria-label="Configurações" class="p-2.5 rounded-xl border border-paper-300 dark:border-stone-700 bg-paper-50 dark:bg-stone-800 text-paper-700 dark:text-paper-200 hover:bg-paper-200 dark:hover:bg-stone-700 transition-colors focus:outline-none">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </button>
+
+          <!-- Settings Dropdown Menu -->
+          <div id="header-settings-dropdown" class="hidden absolute right-0 mt-2 w-60 rounded-2xl bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 shadow-2xl py-2 z-50 divide-y divide-paper-200 dark:divide-stone-800">
+            <div class="py-1">
+              <button type="button" id="theme-toggle-btn" onclick="toggleTheme(); closeSettingsMenu();" class="w-full px-4 py-2.5 text-left text-xs font-medium text-paper-800 dark:text-paper-100 hover:bg-paper-200/70 dark:hover:bg-stone-800 flex items-center gap-3 transition-colors">
+                <svg id="theme-icon-moon" class="w-4 h-4 text-paper-600 dark:text-paper-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                <svg id="theme-icon-sun" class="w-4 h-4 text-amber-400 hidden shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                <span>Modo Noturno / Papel</span>
+              </button>
+
+              <button type="button" onclick="closeSettingsMenu(); openBackupModal();" class="w-full px-4 py-2.5 text-left text-xs font-medium text-paper-800 dark:text-paper-100 hover:bg-paper-200/70 dark:hover:bg-stone-800 flex items-center gap-3 transition-colors">
+                <svg class="w-4 h-4 text-burgundy-600 dark:text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+                <span>Sincronização &amp; Backups</span>
+              </button>
+
+              <button type="button" id="btn-install-pwa" onclick="closeSettingsMenu(); handleInstallPWA();" class="w-full px-4 py-2.5 text-left text-xs font-medium text-paper-800 dark:text-paper-100 hover:bg-paper-200/70 dark:hover:bg-stone-800 flex items-center gap-3 transition-colors">
+                <svg class="w-4 h-4 text-paper-600 dark:text-paper-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <span>Instalar App</span>
+              </button>
+            </div>
+
+            <div class="py-1">
+              <button type="button" id="user-auth-btn" onclick="closeSettingsMenu(); handleUserBadgeClick();" class="w-full px-4 py-2.5 text-left text-xs font-medium text-red-700 dark:text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-colors">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                <span id="user-auth-label">Sair</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -468,8 +492,8 @@
         <div class="flex items-center gap-2">
           <label for="analytics-year-filter" class="text-xs font-medium text-paper-600 dark:text-paper-400">Período:</label>
           <select id="analytics-year-filter" onchange="renderAnalytics()" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100">
-            <option value="all">Todo o Histórico</option>
-            <option value="2026" selected>Ano de 2026</option>
+            <option value="all" selected>Todo o Histórico</option>
+            <option value="2026">Ano de 2026</option>
             <option value="2025">Ano de 2025</option>
           </select>
         </div>
@@ -652,14 +676,20 @@
         </div>
 
         <!-- Dates for Velocity Calculation -->
-        <div id="book-dates-row" class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-paper-200/60 dark:bg-stone-800/50 p-3.5 rounded-xl border border-paper-300/80 dark:border-stone-700">
-          <div class="space-y-1">
-            <label for="book-start-input" class="text-xs font-medium text-paper-700 dark:text-paper-300">Data de Início da Leitura</label>
-            <input type="date" id="book-start-input" class="w-full px-3 py-1.5 rounded-lg text-xs font-mono bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100" />
-          </div>
-          <div class="space-y-1">
-            <label for="book-finish-input" class="text-xs font-medium text-paper-700 dark:text-paper-300">Data de Conclusão (Para cálculo de págs/dia)</label>
-            <input type="date" id="book-finish-input" class="w-full px-3 py-1.5 rounded-lg text-xs font-mono bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100" />
+        <div id="book-dates-row" class="space-y-3 bg-paper-200/60 dark:bg-stone-800/50 p-3.5 rounded-xl border border-paper-300/80 dark:border-stone-700">
+          <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" id="book-skip-dates-input" onchange="handleSkipDatesToggle()" class="w-4 h-4 rounded text-burgundy-600 focus:ring-0" />
+            <span class="text-xs font-medium text-paper-800 dark:text-paper-100">Não lembro quando li (não incluir este livro no cálculo de datas e velocidade)</span>
+          </label>
+          <div id="book-dates-inputs-wrap" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-paper-300/60 dark:border-stone-700/60 transition-opacity">
+            <div class="space-y-1">
+              <label for="book-start-input" class="text-xs font-medium text-paper-700 dark:text-paper-300">Data de Início da Leitura</label>
+              <input type="date" id="book-start-input" class="w-full px-3 py-1.5 rounded-lg text-xs font-mono bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100" />
+            </div>
+            <div class="space-y-1">
+              <label for="book-finish-input" class="text-xs font-medium text-paper-700 dark:text-paper-300">Data de Conclusão (Para cálculo de págs/dia)</label>
+              <input type="date" id="book-finish-input" class="w-full px-3 py-1.5 rounded-lg text-xs font-mono bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700 text-paper-800 dark:text-paper-100" />
+            </div>
           </div>
         </div>
 
@@ -821,6 +851,12 @@
             <option value="kindle">📱 Kindle (E-reader)</option>
             <option value="physical">📖 Livro Físico (Papel)</option>
           </select>
+        </div>
+        <div class="sm:col-span-2 pt-2 border-t border-paper-300/70 dark:border-stone-700/70">
+          <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" id="batch-skip-dates-input" checked class="w-4 h-4 rounded text-burgundy-600 focus:ring-0" />
+            <span class="text-xs font-medium text-paper-800 dark:text-paper-100">Não incluir livros marcados como "Lidos" no cálculo de velocidade (sem datas conhecidas)</span>
+          </label>
         </div>
       </div>
 

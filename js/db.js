@@ -120,10 +120,25 @@
       if (gate) gate.classList.add("hidden");
     }
 
+    function setCloudStatusBadge(statusType, tooltipText) {
+      const pill = document.getElementById("cloud-status-pill");
+      if (!pill) return;
+      pill.title = tooltipText || "";
+      if (statusType === "error") {
+        pill.textContent = "✖";
+        pill.className = "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 shrink-0 select-none";
+      } else if (statusType === "syncing") {
+        pill.textContent = "↻";
+        pill.className = "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none animate-spin";
+      } else {
+        pill.textContent = "✔";
+        pill.className = "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 select-none";
+      }
+    }
+
     function unlockPreviewMode() {
       hideAuthGate();
-      const pill = document.getElementById("cloud-status-pill");
-      if (pill) pill.textContent = "Modo Local";
+      setCloudStatusBadge("ok", "Modo Local ativo");
       showToast("Modo Local ativado.");
     }
 
@@ -217,19 +232,18 @@
 
     function updateUserAuthUI() {
       const label = document.getElementById('user-auth-label');
-      const pill = document.getElementById('cloud-status-pill');
       const modalBadge = document.getElementById('modal-firestore-badge');
 
       if (currentUser) {
-        if (label) label.textContent = 'César • Sair';
-        if (pill) pill.textContent = '☁️ Firebase Ativo';
+        if (label) label.textContent = 'Sair (' + (currentUser.email ? currentUser.email.split('@')[0] : 'César') + ')';
+        setCloudStatusBadge('ok', 'Sincronizado com Firebase (' + currentUser.email + ')');
         if (modalBadge) {
           modalBadge.textContent = 'Sincronizado (' + currentUser.email + ')';
           modalBadge.className = 'text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-600/15 text-emerald-700 dark:text-emerald-300';
         }
       } else {
-        if (label) label.textContent = 'Login Google';
-        if (pill) pill.textContent = '💾 Cache Local';
+        if (label) label.textContent = 'Entrar com Google';
+        setCloudStatusBadge('ok', 'Armazenamento local ativo');
         if (modalBadge) {
           modalBadge.textContent = 'Aguardando Login';
           modalBadge.className = 'text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300';
@@ -244,8 +258,7 @@
         return;
       }
       try {
-        const pill = document.getElementById('cloud-status-pill');
-        if (pill) pill.textContent = '⏳ Salvando nuvem...';
+        setCloudStatusBadge('syncing', 'Salvando na nuvem...');
 
         const docRef = firestoreDB.collection('users').doc(currentUser.uid).collection('codex').doc('libraryState');
         await docRef.set({
@@ -256,10 +269,11 @@
           reviews: JSON.parse(JSON.stringify(state.reviews || []))
         }, { merge: true });
 
-        if (pill) pill.textContent = '☁️ Nuvem em dia';
+        setCloudStatusBadge('ok', 'Nuvem sincronizada');
         if (!silent) showToast('Todos os dados foram salvos no Firebase Cloud Firestore!');
       } catch (err) {
         console.warn('Erro ao sincronizar Firestore:', err);
+        setCloudStatusBadge('error', 'Erro ao sincronizar com a nuvem');
         if (!silent) showToast('Erro ao salvar no Firestore. Verifique as Regras (Rules) do projeto.');
       }
     }
@@ -270,8 +284,7 @@
         return;
       }
       try {
-        const pill = document.getElementById('cloud-status-pill');
-        if (pill) pill.textContent = '⏳ Lendo nuvem...';
+        setCloudStatusBadge('syncing', 'Carregando dados da nuvem...');
 
         const docRef = firestoreDB.collection('users').doc(currentUser.uid).collection('codex').doc('libraryState');
         const snap = await docRef.get();
@@ -297,12 +310,12 @@
             await pushAllToFirestore(true);
           }
         } else {
-          // Primeiro acesso na nuvem: sobe os dados atuais para inicializar o Firestore
           await pushAllToFirestore(true);
         }
-        if (pill) pill.textContent = '☁️ Nuvem em dia';
+        setCloudStatusBadge('ok', 'Nuvem sincronizada');
       } catch (err) {
         console.warn('Falha ao buscar do Firestore:', err);
+        setCloudStatusBadge('error', 'Erro ao ler dados da nuvem');
         if (!silent) showToast('Não foi possível ler do Firestore. Verifique se as Rules foram publicadas.');
       }
     }

@@ -15,9 +15,11 @@
       const totalPages = completedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
       const avgPages = count > 0 ? Math.round(totalPages / count) : 0;
 
-      const totalDays = completedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
-      const avgDays = count > 0 ? (totalDays / count).toFixed(1) : 0;
-      const avgSpeed = count > 0 ? (totalPages / Math.max(1, totalDays)).toFixed(1) : 0;
+      const timedBooks = completedBooks.filter(b => !b.excludeFromSpeedCalc && b.daysTaken && Number(b.daysTaken) > 0 && b.pagesPerDay);
+      const timedPages = timedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
+      const totalDays = timedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
+      const avgDays = timedBooks.length > 0 ? (totalDays / timedBooks.length).toFixed(1) : 0;
+      const avgSpeed = timedBooks.length > 0 ? (timedPages / Math.max(1, totalDays)).toFixed(1) : 0;
 
       const relevantReviews = state.reviews.filter(r => completedBooks.some(b => b.id === r.bookId) && r.wordCount > 0);
       const totalWords = relevantReviews.reduce((acc, r) => acc + (r.wordCount || 0), 0);
@@ -49,10 +51,17 @@
               <td class="py-3 px-3 font-mono text-xs">${b.format === 'kindle' ? '📱 Kindle' : '📖 Físico'}</td>
               <td class="py-3 px-3 font-mono text-xs font-semibold">${b.pageCount} págs</td>
               <td class="py-3 px-3 font-mono text-xs text-paper-600 dark:text-paper-400">
-                ${b.daysTaken || 1} dias
-                <span class="block text-[10px] text-paper-500">${formatDateBR(b.startDate)} → ${formatDateBR(b.finishDate)}</span>
+                ${(!b.excludeFromSpeedCalc && b.daysTaken)
+                  ? `${b.daysTaken} dias<span class="block text-[10px] text-paper-500">${formatDateBR(b.startDate)} → ${formatDateBR(b.finishDate)}</span>`
+                  : `<span class="text-paper-400 italic">Sem data</span>`
+                }
               </td>
-              <td class="py-3 px-3 font-mono text-xs font-bold text-burgundy-600 dark:text-amber-400">${b.pagesPerDay || b.pageCount} págs/dia</td>
+              <td class="py-3 px-3 font-mono text-xs font-bold text-burgundy-600 dark:text-amber-400">
+                ${(!b.excludeFromSpeedCalc && b.pagesPerDay)
+                  ? `${b.pagesPerDay} págs/dia`
+                  : `<span class="text-paper-400 font-normal text-[11px]">Fora do cálculo</span>`
+                }
+              </td>
               <td class="py-3 px-3">${renderStarRating(b.rating)}</td>
               <td class="py-3 px-4 text-right">
                 <button type="button" onclick="openBookInWorkshop(${b.id})" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-paper-200 dark:bg-stone-800 text-paper-800 dark:text-paper-200 hover:bg-burgundy-600 hover:text-white transition-colors">
@@ -69,16 +78,18 @@
       const textColor = isDark ? '#E6DFD5' : '#2C2623';
       const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(44,38,35,0.08)';
 
-      const sortedChrono = [...completedBooks].sort((a, b) => (a.finishDate || '').localeCompare(b.finishDate || ''));
+      const sortedTimed = [...timedBooks].sort((a, b) => (a.finishDate || '').localeCompare(b.finishDate || ''));
+      const speedLabels = sortedTimed.map(b => b.title.length > 18 ? b.title.slice(0, 18) + '…' : b.title);
+      const speedData = sortedTimed.map(b => b.pagesPerDay || 0);
+      const sortedChrono = [...completedBooks].sort((a, b) => (a.finishDate || a.createdAt || '').localeCompare(b.finishDate || b.createdAt || ''));
       const labels = sortedChrono.map(b => b.title.length > 18 ? b.title.slice(0, 18) + '…' : b.title);
-      const speedData = sortedChrono.map(b => b.pagesPerDay || 0);
 
       const speedCanvas = document.getElementById('chart-reading-speed');
       if (state.speedChart) state.speedChart.destroy();
       state.speedChart = new Chart(speedCanvas, {
         type: 'bar',
         data: {
-          labels,
+          labels: speedLabels,
           datasets: [{
             label: 'Páginas por Dia',
             data: speedData,

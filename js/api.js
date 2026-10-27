@@ -1,11 +1,35 @@
 // =========================================================================
     // 6. MULTI-ENGINE BOOK SEARCH (BRASILAPI ISBN + GOOGLE BOOKS + OPENLIBRARY)
     // =========================================================================
+    function handleSkipDatesToggle() {
+      const skipCheckbox = document.getElementById('book-skip-dates-input');
+      const startInput = document.getElementById('book-start-input');
+      const finishInput = document.getElementById('book-finish-input');
+      const wrap = document.getElementById('book-dates-inputs-wrap');
+      const isSkipped = Boolean(skipCheckbox && skipCheckbox.checked);
+
+      if (startInput && finishInput) {
+        startInput.disabled = isSkipped;
+        finishInput.disabled = isSkipped;
+        if (isSkipped) {
+          startInput.value = '';
+          finishInput.value = '';
+        }
+      }
+      if (wrap) {
+        wrap.classList.toggle('opacity-40', isSkipped);
+        wrap.classList.toggle('pointer-events-none', isSkipped);
+      }
+    }
+
     function openAddBookModal() {
       document.getElementById('modal-book-title-heading').textContent = 'Catalogar Nova Obra no Acervo';
       document.getElementById('book-id-input').value = '';
       document.getElementById('form-book').reset();
       document.getElementById('book-status-input').value = 'reading';
+      const skipCheckbox = document.getElementById('book-skip-dates-input');
+      if (skipCheckbox) skipCheckbox.checked = false;
+      handleSkipDatesToggle();
       document.getElementById('book-start-input').value = new Date().toISOString().slice(0, 10);
       document.getElementById('api-search-results').classList.add('hidden');
       document.getElementById('api-search-query').value = '';
@@ -25,8 +49,14 @@
       document.getElementById('book-status-input').value = book.status || 'backlog';
       document.getElementById('book-format-input').value = book.format || 'kindle';
       document.getElementById('book-rating-input').value = book.rating || 0;
-      document.getElementById('book-start-input').value = book.startDate || '';
-      document.getElementById('book-finish-input').value = book.finishDate || '';
+      const skipCheckbox = document.getElementById('book-skip-dates-input');
+      const isSkipped = Boolean(book.excludeFromSpeedCalc || (book.status === 'completed' && !book.startDate && !book.finishDate && !book.daysTaken));
+      if (skipCheckbox) skipCheckbox.checked = isSkipped;
+      handleSkipDatesToggle();
+      if (!isSkipped) {
+        document.getElementById('book-start-input').value = book.startDate || '';
+        document.getElementById('book-finish-input').value = book.finishDate || '';
+      }
       document.getElementById('book-cover-input').value = book.coverUrl || '';
       document.getElementById('api-search-results').classList.add('hidden');
       document.getElementById('modal-add-book').classList.remove('hidden');
@@ -38,6 +68,8 @@
 
     function handleModalStatusChange() {
       const status = document.getElementById('book-status-input').value;
+      const skipCheckbox = document.getElementById('book-skip-dates-input');
+      if (skipCheckbox && skipCheckbox.checked) return;
       const todayIso = new Date().toISOString().slice(0, 10);
       const startInput = document.getElementById('book-start-input');
       const finishInput = document.getElementById('book-finish-input');
@@ -355,12 +387,16 @@
       const status = document.getElementById("book-status-input").value;
       const format = document.getElementById("book-format-input").value;
       const rating = Number(document.getElementById("book-rating-input").value) || 0;
-      const startDate = document.getElementById("book-start-input").value;
-      const finishDate = document.getElementById("book-finish-input").value;
+      const skipDates = Boolean(document.getElementById("book-skip-dates-input")?.checked);
+      const startDate = skipDates ? "" : document.getElementById("book-start-input").value;
+      const finishDate = skipDates ? "" : document.getElementById("book-finish-input").value;
       const coverUrl = document.getElementById("book-cover-input").value.trim();
 
-      const vel = status === "completed"
-        ? calculateReadingVelocity(pageCount, startDate || new Date().toISOString().slice(0, 10), finishDate || new Date().toISOString().slice(0, 10))
+      const hasBothDates = Boolean(startDate && finishDate);
+      const excludeFromSpeedCalc = skipDates || (status === "completed" && !hasBothDates);
+
+      const vel = (status === "completed" && !excludeFromSpeedCalc)
+        ? calculateReadingVelocity(pageCount, startDate, finishDate)
         : { daysTaken: null, pagesPerDay: null };
 
       const nowIso = new Date().toISOString();
@@ -378,6 +414,7 @@
         finishDate,
         daysTaken: vel.daysTaken,
         pagesPerDay: vel.pagesPerDay,
+        excludeFromSpeedCalc,
         coverUrl,
         createdAt: nowIso,
         updatedAt: nowIso
@@ -829,12 +866,14 @@ Retorne APENAS um array JSON com exatamente ${linesChunk.length} objetos na mesm
         return;
       }
 
+      const skipBatchDates = Boolean(document.getElementById("batch-skip-dates-input")?.checked);
       const todayIso = new Date().toISOString().slice(0, 10);
       const nowIso = new Date().toISOString();
       const booksToInsert = selected.map((item, idx) => {
         const isCompleted = item.status === "completed";
         const isReading = item.status === "reading";
         const pages = Math.max(1, Number(item.pageCount) || 200);
+        const excludeSpeed = isCompleted && skipBatchDates;
         return {
           title: item.title.trim(),
           author: (item.author || "Autor desconhecido").trim(),
@@ -845,10 +884,11 @@ Retorne APENAS um array JSON com exatamente ${linesChunk.length} objetos na mesm
           status: item.status,
           format: item.format || "kindle",
           rating: 0,
-          startDate: (isCompleted || isReading) ? todayIso : "",
-          finishDate: isCompleted ? todayIso : "",
-          daysTaken: isCompleted ? 1 : null,
-          pagesPerDay: isCompleted ? pages : null,
+          startDate: isReading ? todayIso : (isCompleted && !excludeSpeed ? todayIso : ""),
+          finishDate: (isCompleted && !excludeSpeed) ? todayIso : "",
+          daysTaken: (isCompleted && !excludeSpeed) ? 1 : null,
+          pagesPerDay: (isCompleted && !excludeSpeed) ? pages : null,
+          excludeFromSpeedCalc: excludeSpeed,
           coverUrl: item.coverUrl || "",
           createdAt: nowIso,
           updatedAt: new Date(Date.now() + idx).toISOString()

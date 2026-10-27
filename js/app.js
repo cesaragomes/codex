@@ -100,6 +100,25 @@
       }
     }
 
+    function toggleSettingsMenu(event) {
+      if (event) event.stopPropagation();
+      const menu = document.getElementById('header-settings-dropdown');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    function closeSettingsMenu() {
+      const menu = document.getElementById('header-settings-dropdown');
+      if (menu) menu.classList.add('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('settings-menu-container');
+      const menu = document.getElementById('header-settings-dropdown');
+      if (menu && !menu.classList.contains('hidden') && container && !container.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
     function toggleTheme() {
       const htmlEl = document.documentElement;
       const isDark = htmlEl.classList.toggle('dark');
@@ -186,8 +205,10 @@
       document.getElementById('count-completed').textContent = completedCount;
 
       const totalPagesRead = completedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
-      const totalDaysRead = completedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
-      const avgSpeed = completedCount > 0 ? (totalPagesRead / Math.max(1, totalDaysRead)).toFixed(1) : '0';
+      const timedCompletedBooks = completedBooks.filter(b => !b.excludeFromSpeedCalc && b.daysTaken && Number(b.daysTaken) > 0 && b.pagesPerDay);
+      const timedPagesRead = timedCompletedBooks.reduce((acc, b) => acc + (Number(b.pageCount) || 0), 0);
+      const totalDaysRead = timedCompletedBooks.reduce((acc, b) => acc + (Number(b.daysTaken) || 1), 0);
+      const avgSpeed = timedCompletedBooks.length > 0 ? (timedPagesRead / Math.max(1, totalDaysRead)).toFixed(1) : '0';
       const completedReviewsCount = state.reviews.filter(r => r.wordCount > 10).length;
 
       document.getElementById('kpi-shelf-completed').textContent = completedCount;
@@ -240,11 +261,18 @@
           : `<span class="text-[11px] font-mono text-paper-600 dark:text-paper-400">📖 Físico</span>`;
 
         let velocityLine = '';
-        if (book.status === 'completed' && book.daysTaken && book.pagesPerDay) {
+        if (book.status === 'completed' && !book.excludeFromSpeedCalc && book.daysTaken && book.pagesPerDay) {
           velocityLine = `
             <div class="mt-2 pt-2 border-t border-paper-300/70 dark:border-stone-800 flex items-center justify-between text-xs">
               <span class="text-paper-600 dark:text-paper-400">Ritmo: <strong class="font-mono text-paper-800 dark:text-paper-200">${book.daysTaken} dias</strong></span>
               <span class="font-mono font-semibold text-burgundy-600 dark:text-amber-400">${book.pagesPerDay} págs/dia</span>
+            </div>
+          `;
+        } else if (book.status === 'completed' && (book.excludeFromSpeedCalc || !book.daysTaken)) {
+          velocityLine = `
+            <div class="mt-2 pt-2 border-t border-paper-300/70 dark:border-stone-800 flex items-center justify-between text-xs">
+              <span class="text-paper-500 dark:text-paper-400 italic">Leitura concluída (sem data no cálculo)</span>
+              <span class="font-mono text-[11px] text-paper-500">—</span>
             </div>
           `;
         } else if (book.status === 'reading' && book.startDate) {
