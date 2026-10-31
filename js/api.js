@@ -117,75 +117,343 @@
       }
     }
 
-    // Helper que busca contagem real de páginas via BrasilAPI (CBL), OpenLibrary Data API ou Edições da Obra
-    async function resolveRealPageCountAndMeta(candidate) {
-      if (candidate.pageCount && candidate.pageCount > 15) return candidate;
+    // Normaliza nomes de autores vindos da CBL no formato "SOBRENOME, NOME" ou CAIXA ALTA
+    function normalizeAuthorName(rawAuthor) {
+      if (!rawAuthor) return "";
+      let str = String(rawAuthor).trim();
+      if (!str || str.toLowerCase() === "autor desconhecido" || str.toLowerCase() === "autor não informado") return "";
+      // Se vier no formato "ASSIS, MACHADO DE" (apenas 1 vírgula invertendo sobrenome e nome)
+      if (str.includes(",") && !str.includes(";")) {
+        const parts = str.split(",").map(s => s.trim()).filter(Boolean);
+        if (parts.length === 2 && parts[0].split(/\s+/).length <= 2) {
+          str = `${parts[1]} ${parts[0]}`;
+        }
+      }
+      // Se estiver tudo em MAIÚSCULAS, converte para Title Case preservando partículas
+      if (str === str.toUpperCase() && str.length > 3) {
+        const lowerParticles = new Set(["de", "da", "do", "das", "dos", "e", "von", "van", "del"]);
+        str = str
+          .toLowerCase()
+          .split(/\s+/)
+          .map((w, i) => (i > 0 && lowerParticles.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+      }
+      return str;
+    }
 
-      // 1. Tenta ISBN brasileiro (97885 / 97865) na BrasilAPI (CBL)
-      const isbns = Array.isArray(candidate.isbnList) ? candidate.isbnList : (candidate.isbn ? [candidate.isbn] : []);
-      const brIsbn = isbns.find(i => /^(97885|97865)\d{8}$/.test(i)) || isbns.find(i => /^\d{10,13}$/.test(i));
-      if (brIsbn) {
+    function normalizeGenreName(rawGenre) {
+      if (!rawGenre) return "";
+      const g = String(rawGenre).trim();
+      const map = {
+        "fiction": "Ficção",
+        "juvenile fiction": "Ficção Juvenil",
+        "young adult fiction": "Ficção Jovem Adulto",
+        "science fiction": "Ficção Científica",
+        "fantasy": "Fantasia",
+        "philosophy": "Filosofia",
+        "history": "História",
+        "biography & autobiography": "Biografia",
+        "biography": "Biografia",
+        "psychology": "Psicologia",
+        "political science": "Ciência Política",
+        "economics": "Economia",
+        "social science": "Ciências Sociais",
+        "social sciences": "Ciências Sociais",
+        "self-help": "Desenvolvimento Pessoal",
+        "business & economics": "Negócios & Economia",
+        "poetry": "Poesia",
+        "drama": "Teatro / Drama",
+        "religion": "Religião",
+        "literary criticism": "Crítica Literária",
+        "classic literature": "Literatura Clássica"
+      };
+      return map[g.toLowerCase()] || g;
+    }
+
+    function mergeBookRecord(target, source) {
+      if (!source) return target;
+      // Título: prefere título mais completo ou substitui se vazio
+      if (source.title && (!target.title || target.title === "Sem título")) {
+        target.title = source.title;
+      }
+      // Autor: normaliza e substitui se vazio/desconhecido
+      const normAuth = normalizeAuthorName(source.author);
+      if (normAuth && (!target.author || target.author === "Autor desconhecido" || target.author === "Autor não informado")) {
+        target.author = normAuth;
+      }
+      // Ano de publicação
+      const yr = Number(source.publishedYear) || 0;
+      if (yr >= 1000 && yr <= 2100 && !target.publishedYear) {
+        target.publishedYear = yr;
+      }
+      // Gênero
+      const normGen = normalizeGenreName(source.genre);
+      if (normGen && normGen !== "Literatura" && (!target.genre || target.genre === "Literatura")) {
+        target.genre = normGen;
+      }
+      // Contagem de páginas (> 15)
+      const pgs = Number(source.pageCount) || 0;
+      if (pgs > 15 && (!target.pageCount || target.pageCount <= 15)) {
+        target.pageCount = pgs;
+      }
+      // Capa real (prioriza links verificados antes de fallback genérico)
+      if (source.coverUrl && !target.coverUrl) {
+        target.coverUrl = source.coverUrl;
+      }
+      if (source.olWorkKey && !target.olWorkKey) {
+        target.olWorkKey = source.olWorkKey;
+      }
+      if (source.isbn && !target.isbn) {
+        target.isbn = source.isbn;
+      }
+      if (Array.isArray(source.isbnList) && source.isbnList.length) {
+        target.isbnList = Array.from(new Set([...(target.isbnList || []), ...source.isbnList]));
+      }
+      return target;
+    }
+
+    // Consulta todos os provedores da BrasilAPI (CBL, Mercado Editorial, Google Books e OpenLibrary) e funde os campos
+    async function fetchBrasilApiMultiProvider(isbnDigits) {
+      const merged = {
+        source: "BrasilAPI",
+        title: "",
+        author: "",
+        publishedYear: "",
+        genre: "Literatura",
+        pageCount: 0,
+        isbn: isbnDigits,
+        isbnList: [isbnDigits],
+        coverUrl: ""
+      };
+
+      const parseBrPayload = (brData) => {
+        if (!brData || !brData.title) return null;
+        const rawAuthors = Array.isArray(brData.authors)
+          ? brData.authors.map(a => normalizeAuthorName(a)).filter(Boolean).join(", ")
+          : "";
+        return {
+          title: brData.subtitle ? `${brData.title}: ${brData.subtitle}` : brData.title,
+          author: rawAuthors,
+          publishedYear: brData.year ? Number(brData.year) : "",
+          genre: (Array.isArray(brData.subjects) && brData.subjects[0]) ? normalizeGenreName(brData.subjects[0]) : "Literatura",
+          pageCount: Number(brData.page_count) || 0,
+          isbn: isbnDigits,
+          isbnList: [isbnDigits],
+          coverUrl: brData.cover_url || ""
+        };
+      };
+
+      // 1. Chamada padrão rápida + chamadas paralelas aos provedores que possuem capa e contagem de páginas
+      const endpoints = [
+        `https://brasilapi.com.br/api/isbn/v1/${isbnDigits}`,
+        `https://brasilapi.com.br/api/isbn/v1/${isbnDigits}?providers=mercado-editorial`,
+        `https://brasilapi.com.br/api/isbn/v1/${isbnDigits}?providers=google-books`,
+        `https://brasilapi.com.br/api/isbn/v1/${isbnDigits}?providers=cbl`
+      ];
+
+      const responses = await Promise.allSettled(
+        endpoints.map(url => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null))
+      );
+
+      for (const res of responses) {
+        if (res.status === "fulfilled" && res.value) {
+          const parsed = parseBrPayload(res.value);
+          if (parsed) mergeBookRecord(merged, parsed);
+        }
+      }
+
+      return merged.title ? merged : null;
+    }
+
+    // Busca complementar automática por Título + Autor quando a busca por ISBN vier sem capa, sem páginas ou sem ano
+    async function enrichMissingFieldsByTitleAndAuthor(record) {
+      if (!record || !record.title) return record;
+      const needsPages = !record.pageCount || record.pageCount <= 15;
+      const needsCover = !record.coverUrl;
+      const needsAuthor = !record.author || record.author === "Autor desconhecido" || record.author === "Autor não informado";
+      const needsYear = !record.publishedYear;
+
+      if (!needsPages && !needsCover && !needsAuthor && !needsYear) {
+        return record;
+      }
+
+      // Usa apenas o título principal (antes de ":" ou " - ") para não restringir demais a busca por outras edições da mesma obra
+      const baseTitle = record.title.split(/[:—–\-]/)[0].trim() || record.title;
+      const firstAuthor = (record.author && record.author !== "Autor desconhecido" && record.author !== "Autor não informado")
+        ? record.author.split(",")[0].trim()
+        : "";
+
+      // 1. Busca no Google Books por Título + Autor para colher capa, páginas, ano e categoria de outras edições da obra
+      try {
+        const gQueries = [];
+        if (firstAuthor) {
+          gQueries.push(`intitle:${baseTitle} inauthor:${firstAuthor}`);
+          gQueries.push(`${baseTitle} ${firstAuthor}`);
+        } else {
+          gQueries.push(`intitle:${baseTitle}`);
+        }
+
+        for (const qStr of gQueries) {
+          const gRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(qStr)}&maxResults=10&printType=books`);
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            const items = gData.items || [];
+            for (const item of items) {
+              const info = item.volumeInfo || {};
+              if (!info.title) continue;
+              const yearMatch = (info.publishedDate || "").match(/\d{4}/);
+              let cover = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || "";
+              if (cover.startsWith("http://")) cover = cover.replace("http://", "https://");
+              mergeBookRecord(record, {
+                title: info.title,
+                author: (info.authors && info.authors.join(", ")) || "",
+                publishedYear: yearMatch ? Number(yearMatch[0]) : "",
+                genre: (info.categories && info.categories[0]) || "",
+                pageCount: (info.pageCount && Number(info.pageCount) > 15) ? Number(info.pageCount) : 0,
+                coverUrl: cover
+              });
+            }
+            if (record.pageCount > 15 && record.coverUrl) break;
+          }
+        }
+      } catch (e) {}
+
+      // 2. Busca na OpenLibrary por Título + Autor (com fields explícitos) se ainda faltar página, capa ou ano
+      if (!record.pageCount || record.pageCount <= 15 || !record.coverUrl || !record.publishedYear) {
         try {
-          const brRes = await fetch(`https://brasilapi.com.br/api/isbn/v1/${brIsbn}`);
-          if (brRes.ok) {
-            const brData = await brRes.json();
-            if (brData) {
-              if (brData.page_count && Number(brData.page_count) > 15) {
-                candidate.pageCount = Number(brData.page_count);
-              }
-              if (!candidate.coverUrl && brData.cover_url) {
-                candidate.coverUrl = brData.cover_url;
-              }
-              if (!candidate.isbn) candidate.isbn = brIsbn;
-              if (candidate.pageCount > 15) return candidate;
+          const olFields = "key,title,author_name,first_publish_year,number_of_pages_median,cover_i,isbn,subject";
+          const olQuery = firstAuthor ? `${baseTitle} ${firstAuthor}` : baseTitle;
+          const olRes = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(olQuery)}&fields=${olFields}&limit=6`);
+          if (olRes.ok) {
+            const olData = await olRes.json();
+            const docs = olData.docs || [];
+            for (const doc of docs) {
+              const cover = doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "";
+              mergeBookRecord(record, {
+                title: doc.title,
+                author: (doc.author_name && doc.author_name.slice(0, 2).join(", ")) || "",
+                publishedYear: doc.first_publish_year || "",
+                genre: (doc.subject && doc.subject[0]) || "",
+                pageCount: (doc.number_of_pages_median && Number(doc.number_of_pages_median) > 15) ? Number(doc.number_of_pages_median) : 0,
+                olWorkKey: doc.key || "",
+                isbnList: Array.isArray(doc.isbn) ? doc.isbn : [],
+                coverUrl: cover
+              });
             }
           }
         } catch (e) {}
+      }
 
-        // 2. Tenta OpenLibrary Books Data API por ISBN
+      return record;
+    }
+
+    // Fallback com Gemini 3.5 Flash-Lite para completar campos que ainda faltarem após varrer todas as APIs
+    async function completeSingleBookWithGemini(record, rawQuery) {
+      const apiKey = getActiveGeminiKey();
+      if (!apiKey) return record;
+      const missingTitle = !record.title || record.title === "Sem título";
+      const missingAuthor = !record.author || record.author === "Autor desconhecido" || record.author === "Autor não informado";
+      const missingPages = !record.pageCount || record.pageCount <= 15;
+      const missingYear = !record.publishedYear;
+      const missingGenre = !record.genre || record.genre === "Literatura";
+
+      if (!missingTitle && !missingAuthor && !missingPages && !missingYear && !missingGenre) {
+        return record;
+      }
+
+      try {
+        const prompt = `Complete os metadados bibliográficos exatos deste livro para catalogação (edição brasileira se aplicável):
+Consulta original: "${rawQuery}"
+Dados parciais já encontrados: Título="${record.title || ""}", Autor="${record.author || ""}", ISBN="${record.isbn || ""}", Ano="${record.publishedYear || ""}", Páginas="${record.pageCount || ""}"
+
+Retorne APENAS um objeto JSON válido no formato:
+{"title": "Título em português", "author": "Nome do Autor", "publishedYear": 2005, "genre": "Gênero Literário em português", "pageCount": 320}`;
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: "application/json"
+            }
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+          const aiObj = JSON.parse(rawText);
+          if (aiObj && typeof aiObj === "object") {
+            mergeBookRecord(record, aiObj);
+          }
+        }
+      } catch (e) {}
+      return record;
+    }
+
+    // Helper que busca contagem real de páginas via BrasilAPI (CBL), OpenLibrary Data API ou Edições da Obra
+    async function resolveRealPageCountAndMeta(candidate) {
+      const isbns = Array.isArray(candidate.isbnList) ? candidate.isbnList : (candidate.isbn ? [candidate.isbn] : []);
+      const brIsbn = isbns.find(i => /^(97885|97865)\d{8}$/.test(i)) || isbns.find(i => /^\d{10,13}$/.test(i));
+
+      if (brIsbn) {
+        // 1. Consulta OpenLibrary Books Data API por ISBN (retorna number_of_pages, publish_date, authors, subjects e cover)
         try {
           const olBookRes = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${brIsbn}&jscmd=data&format=json`);
           if (olBookRes.ok) {
             const olBookData = await olBookRes.json();
             const entry = olBookData[`ISBN:${brIsbn}`];
             if (entry) {
-              if (entry.number_of_pages && Number(entry.number_of_pages) > 15) {
-                candidate.pageCount = Number(entry.number_of_pages);
-              }
-              if (!candidate.coverUrl && entry.cover && (entry.cover.medium || entry.cover.small)) {
-                candidate.coverUrl = entry.cover.medium || entry.cover.small;
-              }
-              if (candidate.pageCount > 15) return candidate;
+              const yrMatch = String(entry.publish_date || "").match(/\d{4}/);
+              mergeBookRecord(candidate, {
+                title: entry.title || "",
+                author: Array.isArray(entry.authors) ? entry.authors.map(a => a.name).join(", ") : "",
+                publishedYear: yrMatch ? Number(yrMatch[0]) : "",
+                genre: (Array.isArray(entry.subjects) && entry.subjects[0]?.name) ? entry.subjects[0].name : "",
+                pageCount: Number(entry.number_of_pages) || 0,
+                coverUrl: entry.cover ? (entry.cover.medium || entry.cover.large || entry.cover.small || "") : ""
+              });
             }
           }
         } catch (e) {}
+
+        // 2. Se ainda faltar dados, consulta os provedores da BrasilAPI para esse ISBN
+        if (!candidate.pageCount || candidate.pageCount <= 15 || !candidate.coverUrl) {
+          try {
+            const brMerged = await fetchBrasilApiMultiProvider(brIsbn);
+            if (brMerged) mergeBookRecord(candidate, brMerged);
+          } catch (e) {}
+        }
       }
 
-      // 3. Se tiver Work Key da OpenLibrary (/works/OL...W), busca nas edições da obra
-      if (candidate.olWorkKey) {
+      // 3. Se tiver Work Key da OpenLibrary (/works/OL...W) e ainda faltar pageCount, busca nas edições da obra
+      if ((!candidate.pageCount || candidate.pageCount <= 15) && candidate.olWorkKey) {
         try {
           const edRes = await fetch(`https://openlibrary.org${candidate.olWorkKey}/editions.json?limit=25`);
           if (edRes.ok) {
             const edData = await edRes.json();
             const entries = edData.entries || [];
-            // Prioriza edição em português (por / pt) com número de páginas válido
             const ptEdition = entries.find(e => e.number_of_pages > 15 && Array.isArray(e.isbn_13) && e.isbn_13.some(x => /^(97885|97865)/.test(x)));
             if (ptEdition) {
               candidate.pageCount = Number(ptEdition.number_of_pages);
               if (!candidate.isbn && ptEdition.isbn_13?.[0]) candidate.isbn = ptEdition.isbn_13[0];
-              return candidate;
-            }
-            const validPages = entries
-              .map(e => Number(e.number_of_pages) || 0)
-              .filter(p => p > 15 && p < 3500)
-              .sort((a, b) => a - b);
-            if (validPages.length > 0) {
-              candidate.pageCount = validPages[Math.floor(validPages.length / 2)];
-              return candidate;
+            } else {
+              const validPages = entries
+                .map(e => Number(e.number_of_pages) || 0)
+                .filter(p => p > 15 && p < 3500)
+                .sort((a, b) => a - b);
+              if (validPages.length > 0) {
+                candidate.pageCount = validPages[Math.floor(validPages.length / 2)];
+              }
             }
           }
         } catch (e) {}
       }
+
+      // 4. Faz busca complementar por Título + Autor se ainda faltar capa, páginas, autor ou ano
+      await enrichMissingFieldsByTitleAndAuthor(candidate);
 
       return candidate;
     }
@@ -202,7 +470,7 @@
       btn.textContent = "Buscando...";
       btn.disabled = true;
       resultsBox.classList.remove("hidden");
-      resultsBox.innerHTML = `<div class="text-xs text-paper-600 dark:text-paper-400 p-2">Buscando capas e contagem exata de páginas...</div>`;
+      resultsBox.innerHTML = `<div class="text-xs text-paper-600 dark:text-paper-400 p-2">Consultando e unificando dados das bases editoriais...</div>`;
 
       const parsedQuery = parseRawBookLine(rawQuery);
       const searchCleanQuery = parsedQuery.cleanAuthor
@@ -213,30 +481,17 @@
       const isIsbn = /^(978|979)?\d{9}[\dXx]$/.test(cleanedDigits);
       const combinedResults = [];
 
-      // 1. Se for ISBN, consulta BrasilAPI ISBN (CBL)
+      // 1. Se for ISBN, consulta TODOS os provedores da BrasilAPI (CBL + Mercado Editorial + Google Books)
       if (isIsbn) {
         try {
-          const brRes = await fetch(`https://brasilapi.com.br/api/isbn/v1/${cleanedDigits}`);
-          if (brRes.ok) {
-            const brData = await brRes.json();
-            if (brData && brData.title) {
-              combinedResults.push({
-                source: "CBL / ISBN",
-                title: brData.subtitle ? `${brData.title}: ${brData.subtitle}` : brData.title,
-                author: Array.isArray(brData.authors) && brData.authors.length ? brData.authors.join(", ") : "Autor não informado",
-                publishedYear: brData.year ? Number(brData.year) : "",
-                genre: Array.isArray(brData.subjects) && brData.subjects[0] ? brData.subjects[0] : "Literatura",
-                pageCount: Number(brData.page_count) || 0,
-                isbn: cleanedDigits,
-                isbnList: [cleanedDigits],
-                coverUrl: brData.cover_url || `https://covers.openlibrary.org/b/isbn/${cleanedDigits}-M.jpg`
-              });
-            }
+          const brUnified = await fetchBrasilApiMultiProvider(cleanedDigits);
+          if (brUnified) {
+            combinedResults.push(brUnified);
           }
         } catch (e) {}
       }
 
-      // 2. Consulta Google Books API (com busca ampla de edições para capturar pageCount real)
+      // 2. Consulta Google Books API (com busca ampla de edições)
       try {
         const queriesToTry = isIsbn
           ? [`isbn:${cleanedDigits}`, cleanedDigits]
@@ -257,25 +512,25 @@
               const ids = Array.isArray(info.industryIdentifiers)
                 ? info.industryIdentifiers.map(x => String(x.identifier || "").replace(/[-\s]/g, ""))
                 : [];
-              const bestIsbn = ids.find(x => /^(97885|97865)/.test(x)) || ids.find(x => /^97[89]\d{10}$/.test(x)) || ids[0] || "";
+              const bestIsbn = ids.find(x => /^(97885|97865)/.test(x)) || ids.find(x => /^97[89]\d{10}$/.test(x)) || ids[0] || (isIsbn ? cleanedDigits : "");
               combinedResults.push({
                 source: "Google Books",
                 title: info.subtitle ? `${info.title}: ${info.subtitle}` : info.title,
-                author: (info.authors && info.authors.join(", ")) || "Autor desconhecido",
+                author: normalizeAuthorName((info.authors && info.authors.join(", ")) || "") || "Autor desconhecido",
                 publishedYear: yearMatch ? Number(yearMatch[0]) : "",
-                genre: (info.categories && info.categories[0]) || "Literatura",
+                genre: normalizeGenreName((info.categories && info.categories[0]) || "") || "Literatura",
                 pageCount: (info.pageCount && Number(info.pageCount) > 15) ? Number(info.pageCount) : 0,
                 isbn: bestIsbn,
                 isbnList: ids,
                 coverUrl: cover
               });
             });
-            if (combinedResults.some(r => r.pageCount > 15)) break;
+            if (combinedResults.some(r => r.pageCount > 15 && r.coverUrl)) break;
           }
         }
       } catch (e) {}
 
-      // 3. Consulta OpenLibrary Search API (COM fields explícitos para retornar number_of_pages_median e isbn!)
+      // 3. Consulta OpenLibrary Search API (COM fields explícitos)
       try {
         const olFields = "key,title,author_name,first_publish_year,number_of_pages_median,cover_i,isbn,subject";
         const olUrl = isIsbn
@@ -289,15 +544,13 @@
             if (!doc.title) return;
             const isbns = Array.isArray(doc.isbn) ? doc.isbn : [];
             const bestIsbn = isbns.find(x => /^(97885|97865)/.test(x)) || isbns.find(x => /^97[89]\d{10}$/.test(x)) || isbns[0] || (isIsbn ? cleanedDigits : "");
-            const cover = doc.cover_i
-              ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-              : (bestIsbn ? `https://covers.openlibrary.org/b/isbn/${bestIsbn}-M.jpg` : "");
+            const cover = doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "";
             combinedResults.push({
               source: "OpenLibrary",
               title: doc.title,
-              author: (doc.author_name && doc.author_name.slice(0, 2).join(", ")) || "Autor desconhecido",
+              author: normalizeAuthorName((doc.author_name && doc.author_name.slice(0, 2).join(", ")) || "") || "Autor desconhecido",
               publishedYear: doc.first_publish_year || "",
-              genre: (doc.subject && doc.subject[0]) || "Literatura",
+              genre: normalizeGenreName((doc.subject && doc.subject[0]) || "") || "Literatura",
               pageCount: (doc.number_of_pages_median && Number(doc.number_of_pages_median) > 15) ? Number(doc.number_of_pages_median) : 0,
               isbn: bestIsbn,
               isbnList: isbns,
@@ -308,64 +561,83 @@
         }
       } catch (e) {}
 
-      // 4. Agrupa e mescla edições do mesmo livro (para que uma edição sem pageCount herde o pageCount real de outra edição!)
-      const mergedMap = new Map();
-      for (const item of combinedResults) {
-        const normTitle = item.title.toLowerCase().replace(/[^a-z0-9à-ú]/g, "").slice(0, 28);
-        const normAuthor = item.author.toLowerCase().replace(/[^a-z0-9à-ú]/g, "").slice(0, 14);
-        const key = `${normTitle}|${normAuthor}`;
-        if (!mergedMap.has(key)) {
-          mergedMap.set(key, { ...item });
-        } else {
-          const existing = mergedMap.get(key);
-          if ((!existing.pageCount || existing.pageCount <= 15) && item.pageCount > 15) {
-            existing.pageCount = item.pageCount;
-          }
-          if (!existing.coverUrl && item.coverUrl) {
-            existing.coverUrl = item.coverUrl;
-          }
-          if (!existing.isbn && item.isbn) {
-            existing.isbn = item.isbn;
-          }
-          if (!existing.olWorkKey && item.olWorkKey) {
-            existing.olWorkKey = item.olWorkKey;
-          }
-          if (Array.isArray(item.isbnList) && item.isbnList.length) {
-            existing.isbnList = Array.from(new Set([...(existing.isbnList || []), ...item.isbnList]));
+      let uniqueResults = [];
+
+      // MELHORIA 1 & 2: Se a pesquisa foi por ISBN, funde TODOS os retornos daquele ISBN em uma ficha mestra única
+      // e executa a busca complementar automática por Título + Autor + Gemini caso falte capa, páginas, ano ou gênero!
+      if (isIsbn) {
+        const masterRecord = {
+          source: "Ficha Unificada ISBN",
+          title: "",
+          author: "Autor desconhecido",
+          publishedYear: "",
+          genre: "Literatura",
+          pageCount: 0,
+          isbn: cleanedDigits,
+          isbnList: [cleanedDigits],
+          olWorkKey: "",
+          coverUrl: ""
+        };
+
+        for (const item of combinedResults) {
+          mergeBookRecord(masterRecord, item);
+        }
+
+        // Consulta complementar na OpenLibrary Books Data API + Edições + Busca por Título + Autor
+        await resolveRealPageCountAndMeta(masterRecord);
+
+        // Se ainda faltar qualquer dado (ex: livro brasileiro novo sem páginas no catálogo), aciona o Gemini automaticamente
+        await completeSingleBookWithGemini(masterRecord, rawQuery);
+
+        // Último fallback de capa por ISBN se nenhuma URL de imagem tiver vindo do Google Books / Mercado Editorial
+        if (!masterRecord.coverUrl && masterRecord.isbn) {
+          masterRecord.coverUrl = `https://covers.openlibrary.org/b/isbn/${masterRecord.isbn}-M.jpg`;
+        }
+
+        if (masterRecord.title) {
+          uniqueResults = [masterRecord];
+        }
+      } else {
+        // Busca por Título/Autor: agrupa pelo título base normalizado para mesclar edições sem duplicar
+        const mergedMap = new Map();
+        for (const item of combinedResults) {
+          const baseTitle = item.title.split(/[:—–\-]/)[0].toLowerCase().replace(/[^a-z0-9à-ú]/g, "").slice(0, 26);
+          const key = baseTitle || item.title.toLowerCase().slice(0, 25);
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, { ...item });
+          } else {
+            mergeBookRecord(mergedMap.get(key), item);
           }
         }
+
+        uniqueResults = Array.from(mergedMap.values()).slice(0, 6);
+
+        await Promise.all(uniqueResults.slice(0, 3).map(async (item) => {
+          if (!item.pageCount || item.pageCount <= 15 || !item.coverUrl || !item.publishedYear) {
+            await resolveRealPageCountAndMeta(item);
+          }
+        }));
+
+        const knownPagesInSearch = uniqueResults.find(r => r.pageCount > 15)?.pageCount || 0;
+        uniqueResults.forEach(item => {
+          if ((!item.pageCount || item.pageCount <= 15) && knownPagesInSearch > 15) {
+            item.pageCount = knownPagesInSearch;
+          }
+        });
+
+        uniqueResults.sort((a, b) => {
+          const scoreA = (a.pageCount > 15 ? 2 : 0) + (a.coverUrl ? 1 : 0);
+          const scoreB = (b.pageCount > 15 ? 2 : 0) + (b.coverUrl ? 1 : 0);
+          return scoreB - scoreA;
+        });
       }
-
-      let uniqueResults = Array.from(mergedMap.values()).slice(0, 6);
-
-      // 5. Se algum dos resultados principais ainda estiver com pageCount === 0, busca nas edições/CBL em paralelo
-      await Promise.all(uniqueResults.slice(0, 4).map(async (item) => {
-        if (!item.pageCount || item.pageCount <= 15) {
-          await resolveRealPageCountAndMeta(item);
-        }
-      }));
-
-      // 6. Se houver outra edição do mesmo autor na lista que já tem pageCount válido (ex: título traduzido vs original), propaga como referência
-      const knownPagesInSearch = uniqueResults.find(r => r.pageCount > 15)?.pageCount || 0;
-      uniqueResults.forEach(item => {
-        if ((!item.pageCount || item.pageCount <= 15) && knownPagesInSearch > 15) {
-          item.pageCount = knownPagesInSearch;
-        }
-      });
-
-      // Ordena priorizando resultados que têm contagem de páginas real e capa
-      uniqueResults.sort((a, b) => {
-        const scoreA = (a.pageCount > 15 ? 2 : 0) + (a.coverUrl ? 1 : 0);
-        const scoreB = (b.pageCount > 15 ? 2 : 0) + (b.coverUrl ? 1 : 0);
-        return scoreB - scoreA;
-      });
 
       window._lastApiItems = uniqueResults;
 
       if (uniqueResults.length === 0) {
         resultsBox.innerHTML = `
           <div class="text-xs text-paper-600 dark:text-paper-400 p-2.5 rounded-lg bg-paper-50 dark:bg-stone-900 border border-paper-300 dark:border-stone-700">
-            Nenhum resultado encontrado. Você pode preencher os campos abaixo manualmente.
+            Nenhum resultado encontrado para esta busca. Você pode preencher os campos abaixo manualmente.
           </div>
         `;
       } else {
@@ -380,6 +652,7 @@
                 <p class="text-xs font-bold text-paper-800 dark:text-paper-100 truncate">${escapeHtml(b.title)}</p>
                 <p class="text-[11px] text-paper-600 dark:text-paper-400 truncate mt-0.5">
                   ${escapeHtml(b.author)} ${b.publishedYear ? `(${b.publishedYear})` : ""} •
+                  <span class="text-paper-500">${escapeHtml(b.genre || "Literatura")}</span> •
                   <span class="font-mono font-semibold text-burgundy-600 dark:text-amber-400">${b.pageCount > 15 ? `${b.pageCount} págs` : "Págs a verificar"}</span>
                 </p>
               </div>
@@ -389,27 +662,33 @@
             </button>
           </div>
         `).join("");
+
+        // Quando o usuário pesquisa por um ISBN exato, já preenche os campos automaticamente na hora!
+        if (isIsbn && uniqueResults.length === 1) {
+          await applyApiBookResult(0);
+        }
       }
 
-      btn.textContent = "Buscar Capa e Dados";
+      btn.textContent = "Buscar na API";
       btn.disabled = false;
     }
 
     async function applyApiBookResult(index) {
       const b = window._lastApiItems?.[index];
       if (!b) return;
-      if (!b.pageCount || b.pageCount <= 15) {
+      if (!b.pageCount || b.pageCount <= 15 || !b.publishedYear || !b.coverUrl || b.author === "Autor desconhecido") {
         await resolveRealPageCountAndMeta(b);
+        await completeSingleBookWithGemini(b, b.isbn || b.title);
       }
-      document.getElementById("book-title-input").value = b.title;
-      document.getElementById("book-author-input").value = b.author;
-      document.getElementById("book-year-input").value = b.publishedYear;
-      document.getElementById("book-genre-input").value = b.genre;
+      document.getElementById("book-title-input").value = b.title || "";
+      document.getElementById("book-author-input").value = (b.author && b.author !== "Autor desconhecido") ? b.author : "";
+      document.getElementById("book-year-input").value = b.publishedYear || "";
+      document.getElementById("book-genre-input").value = b.genre || "Literatura";
       if (b.pageCount && b.pageCount > 15) {
         document.getElementById("book-pages-input").value = b.pageCount;
       }
-      document.getElementById("book-cover-input").value = b.coverUrl;
-      showToast("Dados preenchidos no formulário!");
+      document.getElementById("book-cover-input").value = b.coverUrl || "";
+      showToast("Ficha completa preenchida no formulário!");
     }
 
     async function handleSaveBook(event) {
@@ -613,20 +892,12 @@
         coverUrl: initialData.coverUrl || ""
       };
 
-      // 1. Se tiver ISBN válido, consulta BrasilAPI ISBN (CBL)
+      // 1. Se tiver ISBN válido, consulta todos os provedores da BrasilAPI (CBL + Mercado Editorial + Google Books)
       if (resolved.isbn) {
         try {
-          const brRes = await fetch(`https://brasilapi.com.br/api/isbn/v1/${resolved.isbn}`);
-          if (brRes.ok) {
-            const brData = await brRes.json();
-            if (brData && brData.title) {
-              resolved.title = brData.subtitle ? `${brData.title}: ${brData.subtitle}` : brData.title;
-              if (Array.isArray(brData.authors) && brData.authors.length) resolved.author = brData.authors.join(", ");
-              if (brData.year) resolved.publishedYear = Number(brData.year);
-              if (Array.isArray(brData.subjects) && brData.subjects[0]) resolved.genre = brData.subjects[0];
-              if (brData.page_count && Number(brData.page_count) > 15) resolved.pageCount = Number(brData.page_count);
-              if (brData.cover_url) resolved.coverUrl = brData.cover_url;
-            }
+          const brUnified = await fetchBrasilApiMultiProvider(resolved.isbn);
+          if (brUnified) {
+            mergeBookRecord(resolved, brUnified);
           }
         } catch (e) {}
       }
@@ -732,7 +1003,7 @@ ${linesChunk.map((l, i) => `${i + 1}. ${l}`).join("\n")}
 Retorne APENAS um array JSON com exatamente ${linesChunk.length} objetos na mesma ordem, contendo:
 [{"title": "Título limpo da obra", "author": "Nome do autor", "publishedYear": 1995, "genre": "Gênero literário", "pageCount": 312, "isbn": "ISBN-13 apenas dígitos"}]`;
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
