@@ -119,12 +119,20 @@
           existingMeta.textContent = `${book.driveFileId ? '☁️ Salvo no Google Drive (Pasta: Codex — Biblioteca de Livros)' : '💾 Salvo apenas neste navegador'}${sizeStr ? ' • ' + sizeStr : ''}`;
         }
         const driveLinkEl = document.getElementById('modal-open-drive-link');
+        const syncDriveBtn = document.getElementById('btn-sync-file-to-drive');
         if (driveLinkEl) {
           if (book.driveFileId) {
             driveLinkEl.href = book.driveWebViewLink || `https://drive.google.com/file/d/${encodeURIComponent(book.driveFileId)}/view`;
             driveLinkEl.classList.remove('hidden');
           } else {
             driveLinkEl.classList.add('hidden');
+          }
+        }
+        if (syncDriveBtn) {
+          if (!book.driveFileId) {
+            syncDriveBtn.classList.remove('hidden');
+          } else {
+            syncDriveBtn.classList.add('hidden');
           }
         }
         if (extBadge) {

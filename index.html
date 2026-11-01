@@ -722,7 +722,10 @@
               <p id="modal-existing-file-name" class="text-xs font-mono font-semibold text-paper-800 dark:text-paper-100 truncate"></p>
               <p id="modal-existing-file-meta" class="text-[10px] text-emerald-700 dark:text-emerald-400"></p>
             </div>
-            <div class="flex items-center gap-1.5 shrink-0">
+            <div class="flex items-center gap-1.5 flex-wrap shrink-0">
+              <button type="button" id="btn-sync-file-to-drive" onclick="syncExistingLocalFileToDrive()" class="hidden px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-xs">
+                ☁️ Enviar ao Drive
+              </button>
               <a id="modal-open-drive-link" href="#" target="_blank" rel="noopener" class="hidden px-2.5 py-1 rounded-md text-xs font-semibold bg-paper-200 dark:bg-stone-800 hover:bg-paper-300 dark:hover:bg-stone-700 text-paper-800 dark:text-paper-100">
                 Abrir no Drive ↗
               </a>
