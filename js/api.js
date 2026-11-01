@@ -116,7 +116,16 @@
         if (existingName) existingName.textContent = book.fileName || `${book.title}.${ext.toLowerCase()}`;
         if (existingMeta) {
           const sizeStr = formatFileSize(book.fileSize);
-          existingMeta.textContent = `${book.driveFileId ? '☁️ Salvo no Google Drive' : '💾 Salvo no dispositivo'}${sizeStr ? ' • ' + sizeStr : ''}`;
+          existingMeta.textContent = `${book.driveFileId ? '☁️ Salvo no Google Drive (Pasta: Codex — Biblioteca de Livros)' : '💾 Salvo apenas neste navegador'}${sizeStr ? ' • ' + sizeStr : ''}`;
+        }
+        const driveLinkEl = document.getElementById('modal-open-drive-link');
+        if (driveLinkEl) {
+          if (book.driveFileId) {
+            driveLinkEl.href = book.driveWebViewLink || `https://drive.google.com/file/d/${encodeURIComponent(book.driveFileId)}/view`;
+            driveLinkEl.classList.remove('hidden');
+          } else {
+            driveLinkEl.classList.add('hidden');
+          }
         }
         if (extBadge) {
           extBadge.textContent = ext;
