@@ -320,7 +320,11 @@
       }
     }
 
-    // Google Drive API Direct Backup & Restore
+    // Google Drive API Direct Backup, Restore & Book Digital Files (PDF, EPUB, MOBI, AZW3...)
+    const memoryBookFiles = {};
+    let quickUploadTargetBookId = null;
+    let modalRemoveExistingFileFlag = false;
+
     async function ensureGoogleDriveToken() {
       if (googleDriveAccessToken) return googleDriveAccessToken;
       if (!firebaseAuth) return null;
@@ -333,6 +337,316 @@
         try { sessionStorage.setItem('codex_gdrive_token', googleDriveAccessToken); } catch (e) {}
       }
       return googleDriveAccessToken;
+    }
+
+    function formatFileSize(bytes) {
+      const b = Number(bytes) || 0;
+      if (b <= 0) return '';
+      if (b < 1024) return `${b} B`;
+      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+      return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function getFileExtensionBadge(fileName) {
+      if (!fileName) return 'ARQUIVO';
+      const parts = String(fileName).split('.');
+      if (parts.length < 2) return 'ARQUIVO';
+      return parts.pop().toUpperCase().slice(0, 6);
+    }
+
+    async function ensureCodexBooksDriveFolder(token) {
+      try {
+        const cachedFolderId = localStorage.getItem('codex_drive_books_folder_id');
+        if (cachedFolderId) {
+          const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(cachedFolderId)}?fields=id,trashed`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            if (checkData && checkData.id && !checkData.trashed) {
+              return checkData.id;
+            }
+          }
+        }
+      } catch (e) {}
+
+      try {
+        const q = "name='Codex — Biblioteca de Livros' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (searchData.files && searchData.files[0]?.id) {
+            const fId = searchData.files[0].id;
+            try { localStorage.setItem('codex_drive_books_folder_id', fId); } catch (e) {}
+            return fId;
+          }
+        }
+
+        const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: 'Codex — Biblioteca de Livros',
+            mimeType: 'application/vnd.google-apps.folder'
+          })
+        });
+        if (createRes.ok) {
+          const created = await createRes.json();
+          if (created && created.id) {
+            try { localStorage.setItem('codex_drive_books_folder_id', created.id); } catch (e) {}
+            return created.id;
+          }
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    async function saveBookFileLocally(bookId, fileBlob, fileName, fileMimeType) {
+      const record = {
+        bookId: Number(bookId),
+        fileName: fileName || 'livro',
+        mimeType: fileMimeType || fileBlob.type || 'application/octet-stream',
+        blob: fileBlob,
+        updatedAt: new Date().toISOString()
+      };
+      if (!useMemoryFallback && db && db.bookFiles) {
+        try {
+          await db.bookFiles.put(record);
+          return;
+        } catch (e) {}
+      }
+      memoryBookFiles[Number(bookId)] = record;
+    }
+
+    async function getLocalBookFile(bookId) {
+      if (!useMemoryFallback && db && db.bookFiles) {
+        try {
+          const rec = await db.bookFiles.get(Number(bookId));
+          if (rec && rec.blob) return rec;
+        } catch (e) {}
+      }
+      return memoryBookFiles[Number(bookId)] || null;
+    }
+
+    async function deleteLocalBookFile(bookId) {
+      if (!useMemoryFallback && db && db.bookFiles) {
+        try { await db.bookFiles.delete(Number(bookId)); } catch (e) {}
+      }
+      delete memoryBookFiles[Number(bookId)];
+    }
+
+    async function uploadBookDigitalFileToDrive(fileObj, bookTitle, existingDriveFileId = '') {
+      const ext = getFileExtensionBadge(fileObj.name);
+      const mimeType = fileObj.type || 'application/octet-stream';
+      const cleanTitlePrefix = (bookTitle || '').replace(/[\/:*?"<>|]/g, '').trim();
+      const driveName = cleanTitlePrefix && !fileObj.name.toLowerCase().includes(cleanTitlePrefix.toLowerCase().slice(0, 8))
+        ? `${cleanTitlePrefix} — ${fileObj.name}`
+        : fileObj.name;
+
+      // Se o usuário estiver autenticado com Google (ou puder autorizar o token do Drive), envia para o Google Drive
+      if (currentUser && firebaseAuth) {
+        try {
+          setCloudStatusBadge('syncing', 'Enviando arquivo do livro para o Google Drive...');
+          const token = await ensureGoogleDriveToken();
+          if (token) {
+            const folderId = await ensureCodexBooksDriveFolder(token);
+            const metadata = {
+              name: driveName,
+              mimeType
+            };
+            if (!existingDriveFileId && folderId) {
+              metadata.parents = [folderId];
+            }
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', fileObj);
+
+            const uploadUrl = existingDriveFileId
+              ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existingDriveFileId)}?uploadType=multipart&fields=id,name,size,webViewLink,webContentLink`
+              : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,webViewLink,webContentLink`;
+
+            let uploadRes = await fetch(uploadUrl, {
+              method: existingDriveFileId ? 'PATCH' : 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+              body: form
+            });
+
+            // Se o token tiver expirado (401), renova uma vez e repete
+            if (uploadRes.status === 401) {
+              googleDriveAccessToken = null;
+              try { sessionStorage.removeItem('codex_gdrive_token'); } catch (e) {}
+              const freshToken = await ensureGoogleDriveToken();
+              if (freshToken) {
+                uploadRes = await fetch(uploadUrl, {
+                  method: existingDriveFileId ? 'PATCH' : 'POST',
+                  headers: { Authorization: `Bearer ${freshToken}` },
+                  body: form
+                });
+              }
+            }
+
+            if (uploadRes.ok) {
+              const driveData = await uploadRes.json();
+              setCloudStatusBadge('ok', 'Arquivo salvo no Google Drive');
+              return {
+                driveFileId: driveData.id || '',
+                fileName: fileObj.name,
+                fileSize: Number(driveData.size || fileObj.size) || 0,
+                fileExt: ext,
+                fileMimeType: mimeType,
+                driveWebViewLink: driveData.webViewLink || '',
+                hasLocalFile: true
+              };
+            }
+          }
+        } catch (err) {
+          console.warn('Fallback local para arquivo do livro:', err);
+          setCloudStatusBadge('error', 'Falha no upload ao Drive; arquivo salvo localmente');
+        }
+      }
+
+      // Fallback Local (IndexedDB) quando usado sem login Google ou no Modo Local
+      return {
+        driveFileId: existingDriveFileId || '',
+        fileName: fileObj.name,
+        fileSize: Number(fileObj.size) || 0,
+        fileExt: ext,
+        fileMimeType: mimeType,
+        driveWebViewLink: '',
+        hasLocalFile: true
+      };
+    }
+
+    async function downloadBookDigitalFile(bookId) {
+      const book = state.books.find(b => b.id === Number(bookId));
+      if (!book) return;
+
+      const targetFileName = book.fileName || `${book.title || 'livro'}.${(book.fileExt || 'epub').toLowerCase()}`;
+
+      // 1. Verifica se o binário já está em cache local no IndexedDB para download instantâneo
+      const localRec = await getLocalBookFile(book.id);
+      if (localRec && localRec.blob) {
+        const url = URL.createObjectURL(localRec.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = localRec.fileName || targetFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+        showToast(`Baixando "${localRec.fileName || targetFileName}"...`);
+        return;
+      }
+
+      // 2. Baixa diretamente do Google Drive usando o driveFileId vinculado ao livro
+      if (!book.driveFileId) {
+        showToast('Nenhum arquivo vinculado a este livro ainda.');
+        return;
+      }
+
+      showToast(`Baixando "${targetFileName}" do seu Google Drive...`);
+      try {
+        setCloudStatusBadge('syncing', 'Baixando arquivo do Google Drive...');
+        let token = await ensureGoogleDriveToken();
+        if (token) {
+          let res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(book.driveFileId)}?alt=media`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (res.status === 401) {
+            googleDriveAccessToken = null;
+            try { sessionStorage.removeItem('codex_gdrive_token'); } catch (e) {}
+            token = await ensureGoogleDriveToken();
+            if (token) {
+              res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(book.driveFileId)}?alt=media`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+            }
+          }
+
+          if (res.ok) {
+            const blob = await res.blob();
+            // Guarda em cache local para próximos downloads instantâneos
+            await saveBookFileLocally(book.id, blob, targetFileName, book.fileMimeType || blob.type);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = targetFileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1500);
+            setCloudStatusBadge('ok', 'Download concluído do Google Drive');
+            showToast(`Download de "${targetFileName}" concluído!`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Erro no download via API Drive, usando link direto:', err);
+      }
+
+      // 3. Fallback direto pelo link de download do Google Drive caso o navegador bloqueie o popup OAuth
+      setCloudStatusBadge('ok', 'Abrindo download do Google Drive');
+      const fallbackUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(book.driveFileId)}`;
+      window.open(fallbackUrl, '_blank', 'noopener');
+    }
+
+    function triggerQuickBookFileUpload(bookId) {
+      quickUploadTargetBookId = Number(bookId);
+      const picker = document.getElementById('quick-book-file-picker');
+      if (picker) {
+        picker.value = '';
+        picker.click();
+      }
+    }
+
+    async function handleQuickBookFileSelected(event) {
+      const file = event.target.files?.[0];
+      if (!file || !quickUploadTargetBookId) return;
+      const book = state.books.find(b => b.id === Number(quickUploadTargetBookId));
+      if (!book) return;
+
+      showToast(`Enviando "${file.name}" (${formatFileSize(file.size)}) para o Google Drive...`);
+      const fileMeta = await uploadBookDigitalFileToDrive(file, book.title, book.driveFileId || '');
+      await saveBookFileLocally(book.id, file, file.name, file.type);
+
+      book.driveFileId = fileMeta.driveFileId || '';
+      book.fileName = fileMeta.fileName;
+      book.fileSize = fileMeta.fileSize;
+      book.fileExt = fileMeta.fileExt;
+      book.fileMimeType = fileMeta.fileMimeType;
+      book.driveWebViewLink = fileMeta.driveWebViewLink || '';
+      book.hasLocalFile = true;
+      book.updatedAt = new Date().toISOString();
+
+      if (!useMemoryFallback && db) {
+        await db.books.put(book);
+      }
+      await refreshStateFromDB();
+      await pushAllToFirestore(true);
+      showToast(book.driveFileId
+        ? `Arquivo "${file.name}" salvo no Google Drive e vinculado a "${book.title}"!`
+        : `Arquivo "${file.name}" vinculado localmente a "${book.title}"!`);
+    }
+
+    function downloadFileFromModalCurrentBook() {
+      const idVal = Number(document.getElementById('book-id-input')?.value);
+      if (idVal) downloadBookDigitalFile(idVal);
+    }
+
+    function markRemoveFileInModal() {
+      modalRemoveExistingFileFlag = true;
+      document.getElementById('modal-existing-file-box')?.classList.add('hidden');
+      document.getElementById('modal-file-ext-badge')?.classList.add('hidden');
+      const fileInput = document.getElementById('book-file-input');
+      if (fileInput) fileInput.value = '';
+      showToast('O arquivo será desvinculado ao salvar.');
     }
 
     async function backupToGoogleDrive() {
@@ -455,6 +769,12 @@
             books: '++id, status, format, rating, startDate, finishDate, author, genre',
             notes: '++id, bookId, type, createdAt',
             reviews: '++id, &bookId, isCompleted, wordCount, updatedAt'
+          });
+          db.version(2).stores({
+            books: '++id, status, format, rating, startDate, finishDate, author, genre',
+            notes: '++id, bookId, type, createdAt',
+            reviews: '++id, &bookId, isCompleted, wordCount, updatedAt',
+            bookFiles: '&bookId, fileName, updatedAt'
           });
           await db.open();
           const count = await db.books.count();

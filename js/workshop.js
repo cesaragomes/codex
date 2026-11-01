@@ -59,6 +59,15 @@
                   </option>
                 `).join('')}
               </select>
+              ${(book.driveFileId || book.hasLocalFile || book.fileName) ? `
+                <button type="button" onclick="downloadBookDigitalFile(${book.id})" title="Baixar ${escapeHtml(book.fileName || 'arquivo')}" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1">
+                  <span>⬇ Baixar ${escapeHtml(book.fileExt || getFileExtensionBadge(book.fileName) || 'Livro')}</span>
+                </button>
+              ` : `
+                <button type="button" onclick="triggerQuickBookFileUpload(${book.id})" class="px-2.5 py-1.5 rounded-xl text-xs border border-paper-300 dark:border-stone-700 hover:bg-paper-200 dark:hover:bg-stone-800 text-paper-700 dark:text-paper-300">
+                  📎 Anexar Arquivo
+                </button>
+              `}
               <button type="button" onclick="openEditBookModal(${book.id})" class="px-2.5 py-1.5 rounded-xl text-xs border border-paper-300 dark:border-stone-700 hover:bg-paper-200 dark:hover:bg-stone-800 text-paper-700 dark:text-paper-300">
                 Datas / Ficha
               </button>

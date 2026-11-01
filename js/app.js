@@ -293,8 +293,11 @@
             <div class="space-y-3">
               <div class="flex items-center justify-between gap-2">
                 ${statusBadge}
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
                   ${formatBadge}
+                  <button type="button" onclick="triggerQuickBookFileUpload(${book.id})" title="${(book.driveFileId || book.hasLocalFile || book.fileName) ? `Substituir arquivo (${escapeHtml(book.fileName || '')})` : 'Anexar arquivo do livro (.epub, .pdf, .mobi...) no Google Drive'}" class="p-1 rounded hover:bg-paper-200 dark:hover:bg-stone-800 ${(book.driveFileId || book.hasLocalFile || book.fileName) ? 'text-emerald-600 dark:text-emerald-400' : 'text-paper-500'}">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                  </button>
                   <button type="button" onclick="openEditBookModal(${book.id})" title="Editar ficha técnica ou datas" class="p-1 rounded hover:bg-paper-200 dark:hover:bg-stone-800 text-paper-500">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                   </button>
@@ -320,11 +323,21 @@
             </div>
 
             <!-- Action Footer -->
-            <div class="pt-3 border-t border-paper-300/70 dark:border-stone-800 flex items-center justify-between gap-2">
+            <div class="pt-3 border-t border-paper-300/70 dark:border-stone-800 flex items-center justify-between gap-2 flex-wrap">
               <div class="flex items-center gap-2 text-[11px] font-mono text-paper-600 dark:text-paper-400">
-                <span>🗒️ ${notesCount} nota${notesCount === 1 ? '' : 's'}</span>
+                ${(book.driveFileId || book.hasLocalFile || book.fileName) ? `
+                  <button type="button" onclick="downloadBookDigitalFile(${book.id})" title="Baixar ${escapeHtml(book.fileName || 'arquivo do livro')} (${formatFileSize(book.fileSize)})" class="px-2 py-1 rounded-md bg-emerald-600/15 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-300 hover:text-white border border-emerald-600/30 font-mono text-[10px] font-bold transition-colors flex items-center gap-1">
+                    <span>⬇</span>
+                    <span>${escapeHtml(book.fileExt || getFileExtensionBadge(book.fileName) || 'BAIXAR')}</span>
+                  </button>
+                ` : `
+                  <button type="button" onclick="triggerQuickBookFileUpload(${book.id})" title="Enviar arquivo (.epub, .pdf, .mobi) para o Google Drive" class="px-2 py-0.5 rounded-md bg-paper-200/80 dark:bg-stone-800 hover:bg-paper-300 dark:hover:bg-stone-700 text-paper-600 dark:text-paper-400 font-mono text-[10px] transition-colors flex items-center gap-1">
+                    <span>+ Arquivo</span>
+                  </button>
+                `}
+                <span>🗒️ ${notesCount}</span>
                 <span>•</span>
-                <span>✍️ ${hasReview ? `${review.wordCount} pal.` : 'Sem resenha'}</span>
+                <span>✍️ ${hasReview ? `${review.wordCount}p` : '0p'}</span>
               </div>
 
               <div class="flex items-center gap-1.5">

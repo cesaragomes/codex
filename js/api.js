@@ -67,6 +67,12 @@
       handleSkipDatesToggle();
       setModalBookStatus('reading');
       document.getElementById('book-start-input').value = new Date().toISOString().slice(0, 10);
+      modalRemoveExistingFileFlag = false;
+      const fileInput = document.getElementById('book-file-input');
+      if (fileInput) fileInput.value = '';
+      document.getElementById('modal-existing-file-box')?.classList.add('hidden');
+      document.getElementById('modal-file-ext-badge')?.classList.add('hidden');
+      document.getElementById('modal-file-upload-status')?.classList.add('hidden');
       document.getElementById('api-search-results').classList.add('hidden');
       document.getElementById('api-search-query').value = '';
       document.getElementById('modal-add-book').classList.remove('hidden');
@@ -94,6 +100,33 @@
         document.getElementById('book-finish-input').value = book.finishDate || '';
       }
       document.getElementById('book-cover-input').value = book.coverUrl || '';
+      modalRemoveExistingFileFlag = false;
+      const fileInput = document.getElementById('book-file-input');
+      if (fileInput) fileInput.value = '';
+      document.getElementById('modal-file-upload-status')?.classList.add('hidden');
+
+      const existingBox = document.getElementById('modal-existing-file-box');
+      const existingName = document.getElementById('modal-existing-file-name');
+      const existingMeta = document.getElementById('modal-existing-file-meta');
+      const extBadge = document.getElementById('modal-file-ext-badge');
+
+      if (book.driveFileId || book.hasLocalFile || book.fileName) {
+        const ext = book.fileExt || getFileExtensionBadge(book.fileName);
+        if (existingBox) existingBox.classList.remove('hidden');
+        if (existingName) existingName.textContent = book.fileName || `${book.title}.${ext.toLowerCase()}`;
+        if (existingMeta) {
+          const sizeStr = formatFileSize(book.fileSize);
+          existingMeta.textContent = `${book.driveFileId ? '☁️ Salvo no Google Drive' : '💾 Salvo no dispositivo'}${sizeStr ? ' • ' + sizeStr : ''}`;
+        }
+        if (extBadge) {
+          extBadge.textContent = ext;
+          extBadge.classList.remove('hidden');
+        }
+      } else {
+        if (existingBox) existingBox.classList.add('hidden');
+        if (extBadge) extBadge.classList.add('hidden');
+      }
+
       document.getElementById('api-search-results').classList.add('hidden');
       document.getElementById('modal-add-book').classList.remove('hidden');
     }
@@ -714,6 +747,42 @@ Retorne APENAS um objeto JSON válido no formato:
         ? calculateReadingVelocity(pageCount, startDate, finishDate)
         : { daysTaken: null, pagesPerDay: null };
 
+      const existingBook = idVal ? state.books.find(b => b.id === Number(idVal)) : null;
+      const fileInput = document.getElementById("book-file-input");
+      const selectedFile = fileInput?.files?.[0] || null;
+      const statusTextEl = document.getElementById("modal-file-upload-status");
+
+      let fileFields = {
+        driveFileId: (!modalRemoveExistingFileFlag && existingBook?.driveFileId) ? existingBook.driveFileId : "",
+        fileName: (!modalRemoveExistingFileFlag && existingBook?.fileName) ? existingBook.fileName : "",
+        fileSize: (!modalRemoveExistingFileFlag && existingBook?.fileSize) ? existingBook.fileSize : 0,
+        fileExt: (!modalRemoveExistingFileFlag && existingBook?.fileExt) ? existingBook.fileExt : "",
+        fileMimeType: (!modalRemoveExistingFileFlag && existingBook?.fileMimeType) ? existingBook.fileMimeType : "",
+        driveWebViewLink: (!modalRemoveExistingFileFlag && existingBook?.driveWebViewLink) ? existingBook.driveWebViewLink : "",
+        hasLocalFile: Boolean(!modalRemoveExistingFileFlag && existingBook?.hasLocalFile)
+      };
+
+      if (modalRemoveExistingFileFlag && existingBook) {
+        await deleteLocalBookFile(existingBook.id);
+      }
+
+      if (selectedFile) {
+        if (statusTextEl) {
+          statusTextEl.textContent = `⏳ Enviando "${selectedFile.name}" (${formatFileSize(selectedFile.size)}) para o Google Drive...`;
+          statusTextEl.classList.remove("hidden");
+        }
+        const uploadedMeta = await uploadBookDigitalFileToDrive(selectedFile, title, fileFields.driveFileId);
+        fileFields = {
+          driveFileId: uploadedMeta.driveFileId || "",
+          fileName: uploadedMeta.fileName,
+          fileSize: uploadedMeta.fileSize,
+          fileExt: uploadedMeta.fileExt,
+          fileMimeType: uploadedMeta.fileMimeType,
+          driveWebViewLink: uploadedMeta.driveWebViewLink || "",
+          hasLocalFile: true
+        };
+      }
+
       const nowIso = new Date().toISOString();
       const bookObj = {
         ...(idVal ? { id: Number(idVal) } : {}),
@@ -731,22 +800,30 @@ Retorne APENAS um objeto JSON válido no formato:
         pagesPerDay: vel.pagesPerDay,
         excludeFromSpeedCalc,
         coverUrl,
-        createdAt: nowIso,
+        ...fileFields,
+        createdAt: existingBook?.createdAt || nowIso,
         updatedAt: nowIso
       };
 
+      let finalBookId = null;
       if (!useMemoryFallback && db) {
-        const savedId = await db.books.put(bookObj);
-        state.selectedBookId = savedId;
+        finalBookId = await db.books.put(bookObj);
+        state.selectedBookId = finalBookId;
       } else {
         if (idVal) {
-          const idx = memoryStore.books.findIndex(b => b.id === Number(idVal));
+          finalBookId = Number(idVal);
+          const idx = memoryStore.books.findIndex(b => b.id === finalBookId);
           if (idx >= 0) memoryStore.books[idx] = bookObj;
         } else {
-          bookObj.id = Date.now();
+          finalBookId = Date.now();
+          bookObj.id = finalBookId;
           memoryStore.books.push(bookObj);
-          state.selectedBookId = bookObj.id;
+          state.selectedBookId = finalBookId;
         }
+      }
+
+      if (selectedFile && finalBookId) {
+        await saveBookFileLocally(finalBookId, selectedFile, selectedFile.name, selectedFile.type);
       }
 
       closeAddBookModal();
